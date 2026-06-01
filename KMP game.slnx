@@ -3,5 +3,6 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="KMP game.vcxproj" />
+  <Project Path="KMP game.vcxproj" Id="d8b462ce-386f-4d23-b862-d56f3a711628" />
+  <Project Path="최종 게임 프로젝트/최종 게임 프로젝트.vcxproj" Id="15c1fd41-4838-493b-a467-151f80ef86b5" />
 </Solution>
