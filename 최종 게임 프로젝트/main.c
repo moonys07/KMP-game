@@ -970,6 +970,18 @@ void RunGame(bool multi)
         // ==========================
         if (GetAsyncKeyState(VK_ESCAPE) & 1)
         {
+            //esc를 때기 전까지 대기
+            if (GetAsyncKeyState(VK_ESCAPE) & 0x8000)
+            {
+                Sleep(10);
+            }
+
+            //남아있는 키 입력 제거
+            while (_kbhit())
+            {
+                _getch();
+            }
+
             break;
         }
     }
