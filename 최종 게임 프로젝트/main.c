@@ -1,54 +1,45 @@
-#define _CRT_SECURE_NO_WARNINGS
+ï»¿#define _CRT_SECURE_NO_WARNINGS
 
-// Ç¥ÁØ ÀÔÃâ·Â ÇÔ¼ö »ç¿ë
 #include <stdio.h>
-// µ¿Àû ¸Ş¸ğ¸® °ü·Ã ÇÔ¼ö »ç¿ë ¹× system ÇÔ¼ö »ç¿ë
 #include <stdlib.h>
-// _getch() ÇÔ¼ö »ç¿ë
 #include <conio.h>
-// Windows API »ç¿ë
 #include <Windows.h>
-// bool ÀÚ·áÇü »ç¿ë
 #include <stdbool.h>
 
 // =====================================================
-// KMP STUDIO
-// ASCII JUMP GAME - JUMP KING VERSION
+// KMP STUDIO - ASCII JUMP GAME
 // =====================================================
 
-// ÄÜ¼Ö È­¸é °¡·Î Å©±â
 #define WIDTH 100
-// ÄÜ¼Ö È­¸é ¼¼·Î Å©±â
 #define HEIGHT 30
 
-#define MAX_GAUGE 2500
-#define TRAIL_MAX 200
-#define PLATFORM_COUNT 25
+#define MAX_GAUGE 1000.0f
+#define PLATFORM_COUNT 56
 
-// ±âº» »ö»ó º¹±¸
+// [ìˆ˜ì • í¬ì¸íŠ¸ 2, 3] ê°€ë¡œ ì í”„ë ¥ì„ ë†’ì´ê³  ì„¸ë¡œ ì í”„ë ¥ì„ ì¡°ì •
+#define GRAVITY 0.25f
+#define MAX_JUMP_VX 4.8f 
+#define MAX_JUMP_VY 8.5f 
+
 #define COLOR_RESET "\x1b[0m"
 
-// =====================
-// ±¸Á¶Ã¼ Á¤ÀÇ
-// =====================
-typedef struct
-{
+typedef struct {
     float x;
     float y;
     float vx;
     float vy;
     bool isJumping;
+    bool isMoving;
+    int walkTimer;
 } Player;
 
-typedef struct
-{
+typedef struct {
     int x;
     int y;
     int width;
 } Platform;
 
-typedef struct
-{
+typedef struct {
     int x;
     int y;
     char* name;
@@ -56,108 +47,524 @@ typedef struct
     char* desc2;
 } NPC;
 
-// ÇÔ¼ö ¼±¾ğ
-void RenderHall();
-int GetNearNpc();
-void RunCreditHall();
-
 // =====================
-// Àü¿ª º¯¼ö
+// ì „ì—­ ë³€ìˆ˜
 // =====================
 Player players[2];
 bool isCharging = false;
 bool isMulti = false;
 ULONGLONG chargeStart = 0;
-float currentPower = 0;
 int currentPlayer = 0;
 int moveDir[2] = { 1, 1 };
 
 int cameraY = 0;
+int currentZone = -1;    // [ìˆ˜ì • í¬ì¸íŠ¸ 7] ì´ˆê¸°ê°’ì„ -1ë¡œ í•˜ì—¬ ì‹œì‘ ì‹œ "ì§€í•˜"ê°€ ëœ¨ë„ë¡ ìˆ˜ì •
+int areaNotiTimer = 0;
+
 int hallX = 10;
 int hallY = 24;
+int hallWalkTimer = 0;
+bool hallIsMoving = false;
 int currentNpc = -1;
-
-// ¸»Ç³¼± ·»´õ¸µ¿ë º¯¼ö (ÇöÀç ´ëÈ­ÁßÀÎ NPC ÀÎµ¦½º, -1ÀÌ¸é ´ëÈ­ ¾ÈÇÔ)
 int activeBubbleNpc = -1;
 
-// [¼öÁ¤ Æ÷ÀÎÆ® 3] NPCµéÀÇ yÁÂÇ¥¸¦ ÇÃ·¹ÀÌ¾î(24)¿Í µ¿ÀÏÇÏ°Ô ¸ÂÃç ¹Ù´Ú¿¡ ´ê°Ô ¼öÁ¤
-NPC npcs[3] =
-{
-    { 20, 24, "±è½ÂÁÖ", "ÇÃ·§Æû ½Ã½ºÅÛ °³¹ß", "Á¡ÇÁ ¹°¸® ±¸Çö" },
-    { 50, 24, "¹®¿ë¼º", "¸Ê ¼³°è ´ã´ç", "UI µğÀÚÀÎ ´ã´ç" },
-    { 80, 24, "¹ÚÁ¤¿ø", "°ÔÀÓ ÃÑ°ı", "Å©·¹µ÷ ½Ã½ºÅÛ Á¦ÀÛ" }
+NPC npcs[3] = {
+    { 20, 24, "ê¹€ìŠ¹ì£¼", "í”Œë«í¼ ì‹œìŠ¤í…œ ê°œë°œ", "ì í”„ ë¬¼ë¦¬ êµ¬í˜„" },
+    { 50, 24, "ë¬¸ìš©ì„±", "ë§µ ì„¤ê³„ ë‹´ë‹¹", "UI ë””ìì¸ ë‹´ë‹¹" },
+    { 80, 24, "ë°•ì •ì›", "ê²Œì„ ì´ê´„", "í¬ë ˆë”§ ì‹œìŠ¤í…œ ì œì‘" }
+};
+
+// [ìˆ˜ì • í¬ì¸íŠ¸ 3] ê°€ë¡œ ì í”„ë ¥ ì¦ê°€ì— ë§ì¶˜ í”Œë«í¼ Xì¢Œí‘œ ê°„ê²© í™•ì¥
+Platform platforms[PLATFORM_COUNT] = {
+    // ì§€í•˜
+    {0, 27, WIDTH}, {30, 23, 15}, {70, 19, 10}, {40, 15, 12}, {10, 11, 10},
+    {55, 7, 10}, {85, 3, 10}, {45, -1, 12}, {15, -5, 10}, {75, -9, 10},
+    {20, -13, 10}, {60, -17, 12}, {85, -21, 10}, {40, -25, 12}, {10, -31, 15}, {70, -37, 15},
+    // ì§€ìƒ
+    {30, -43, 10}, {80, -47, 12}, {20, -51, 10}, {60, -55, 12}, {10, -59, 15},
+    {50, -63, 10}, {85, -67, 10}, {35, -71, 10}, {5, -75, 12}, {75, -79, 10},
+    {45, -83, 10}, {15, -87, 12}, {60, -91, 10}, {85, -95, 15}, {30, -99, 10},
+    {70, -103, 10}, {20, -107, 12}, {60, -111, 10}, {10, -115, 10}, {50, -119, 15},
+    // í•˜ëŠ˜
+    {80, -125, 10}, {30, -131, 12}, {60, -137, 10}, {15, -143, 10}, {75, -149, 10},
+    {40, -155, 15}, {85, -161, 10}, {25, -167, 10}, {65, -173, 10}, {15, -179, 12},
+    {55, -185, 10}, {85, -191, 12}, {35, -197, 10}, {5, -203, 10}, {45, -209, 10},
+    {80, -215, 12}, {25, -221, 10}, {65, -227, 15}, {15, -233, 10}, {40, -240, 20}
 };
 
 // =====================
-// ¸Ê µ¥ÀÌÅÍ
+// ìœ í‹¸ë¦¬í‹° í•¨ìˆ˜
 // =====================
-Platform platforms[PLATFORM_COUNT] =
-{
-    {0, 27, WIDTH},
-    {40, 23, 10},
-    {20, 19, 10},
-    {55, 15, 12},
-    {75, 11, 10},
-    {50, 7, 10},
-    {28, 3, 10},
-    {8, -1, 10},
-    {25, -5, 10},
-    {48, -9, 10},
-    {70, -13, 10},
-    {45, -17, 10},
-    {22, -21, 10},
-    {5, -25, 10},
-    {30, -29, 12},
-    {55, -33, 10},
-    {78, -37, 10},
-    {60, -41, 10},
-    {38, -45, 10},
-    {15, -49, 10},
-    {35, -53, 10},
-    {58, -57, 10},
-    {82, -61, 10},
-    {50, -65, 15}
-};
+void move_cursor(int x, int y) { printf("\x1b[%d;%dH", y, x); }
+void set_font_color(int code) { printf("\x1b[%dm", code); }
+void set_bg_color(int code) { printf("\x1b[%dm", code); }
+// [ìˆ˜ì • í¬ì¸íŠ¸ 8] RGB ë°©ì‹ì„ ì‚¬ìš©í•œ ì‹¤ì œ í™(ê°ˆìƒ‰) ìƒ‰ìƒ
+void set_bg_brown() { printf("\x1b[48;5;130m"); }
+void hide_cursor() { printf("\x1b[?25l"); }
+void show_cursor() { printf("\x1b[?25h"); }
+void clear_screen() { printf("\x1b[2J\x1b[3J\x1b[H"); }
 
-// =====================
-// À¯Æ¿¸®Æ¼ ÇÔ¼ö
-// =====================
-void move_cursor(int x, int y)
-{
-    printf("\x1b[%d;%dH", y, x);
+int GetZone(float y) {
+    if (y > -40) return 0;       // ì§€í•˜
+    if (y > -120) return 1;      // ì§€ìƒ
+    return 2;                    // í•˜ëŠ˜
 }
 
-void set_font_color(int code)
-{
-    printf("\x1b[%dm", code);
+void SetZoneColor(int y) {
+    int zone = GetZone((float)y);
+    if (zone == 0) set_bg_color(40);
+    else if (zone == 1) set_bg_color(104);
+    else set_bg_color(106);
 }
 
-void set_bg_color(int code)
-{
-    printf("\x1b[%dm", code);
+void SetCharColor(int index, int y) {
+    SetZoneColor(y);
+    if (isMulti) {
+        if (index == 0) set_font_color(92);
+        else set_font_color(93);
+    }
+    else {
+        set_font_color(97);
+    }
 }
 
-void hide_cursor()
-{
-    printf("\x1b[?25l");
+void DrawCharacter(int x, int y, int index) {
+    Player* p = &players[index];
+    if (y < -2 || y > HEIGHT) return;
+
+    if (isCharging && currentPlayer == index) {
+        SetCharColor(index, y);     move_cursor(x, y);     printf(" O ");
+        SetCharColor(index, y + 1); move_cursor(x, y + 1); printf("â””|â”˜");
+        SetCharColor(index, y + 2); move_cursor(x, y + 2); printf("/ \\");
+    }
+    else if (p->isJumping) {
+        SetCharColor(index, y);     move_cursor(x, y);     printf("\\O/");
+        SetCharColor(index, y + 1); move_cursor(x, y + 1); printf(" | ");
+        SetCharColor(index, y + 2); move_cursor(x, y + 2); printf("/ \\");
+    }
+    else {
+        SetCharColor(index, y);     move_cursor(x, y);     printf(" O ");
+        SetCharColor(index, y + 1); move_cursor(x, y + 1); printf("(|)");
+        SetCharColor(index, y + 2); move_cursor(x, y + 2);
+        if (p->isMoving) {
+            if ((p->walkTimer / 4) % 2 == 0) printf("/| ");
+            else                             printf(" |\\");
+        }
+        else {
+            printf("/ \\");
+        }
+    }
+    printf(COLOR_RESET);
 }
 
-void show_cursor()
-{
-    printf("\x1b[?25h");
+// [ìˆ˜ì • í¬ì¸íŠ¸ 6] í”½ì…€ ë‹¨ìœ„ë¡œ ì •í™•í•˜ê²Œ ë°œì´ í”Œë«í¼ì— ê±¸ì³ìˆëŠ”ì§€ í™•ì¸
+bool WillHitPlatform(float px, float py, float prev_py, float* hitY) {
+    for (int i = 0; i < PLATFORM_COUNT; i++) {
+        Platform* pf = &platforms[i];
+        // ìºë¦­í„°ì˜ ë„“ì´(3ì¹¸) ì¤‘ 1ì¹¸ì´ë¼ë„ í”Œë«í¼ ìœ„ì— ìˆìœ¼ë©´ ì°©ì§€ ì¸ì •
+        if (px + 2.0f >= pf->x && px <= pf->x + pf->width) {
+            if (prev_py + 3.0f <= pf->y && py + 3.0f >= pf->y) {
+                *hitY = (float)(pf->y - 3);
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
-void clear_screen()
-{
-    // È­¸é ÀüÃ¼ ÃÊ±âÈ­ ¹× ½ºÅ©·Ñ¹Ù Á¤¸®
-    printf("\x1b[2J\x1b[3J\x1b[H");
+void InitGame(bool multi) {
+    isMulti = multi;
+    currentPlayer = 0;
+    isCharging = false;
+    cameraY = 0;
+    currentZone = -1; // ì‹œì‘ ì‹œ ì§€ì—­ ì•Œë¦¼ì„ ë„ìš°ê¸° ìœ„í•´ -1ë¡œ ì´ˆê¸°í™”
+    areaNotiTimer = 0;
+
+    players[0] = (Player){ 10, 24, 0, 0, false, false, 0 };
+    players[1] = (Player){ 60, 24, 0, 0, false, false, 0 };
+    clear_screen();
 }
 
-void ShowLogo()
-{
+void Input() {
+    Player* p = &players[currentPlayer];
+    int leftKey = (!isMulti || currentPlayer == 0) ? 'A' : VK_LEFT;
+    int rightKey = (!isMulti || currentPlayer == 0) ? 'D' : VK_RIGHT;
+    int jumpKey = (!isMulti) ? VK_SPACE : (currentPlayer == 0 ? 'W' : VK_UP);
+
+    bool movingThisFrame = false;
+
+    if (GetAsyncKeyState(leftKey) & 0x8000) {
+        moveDir[currentPlayer] = -1;
+        if (!isCharging && !p->isJumping) { p->x -= 1.0f; movingThisFrame = true; }
+    }
+    if (GetAsyncKeyState(rightKey) & 0x8000) {
+        moveDir[currentPlayer] = 1;
+        if (!isCharging && !p->isJumping) { p->x += 1.0f; movingThisFrame = true; }
+    }
+
+    p->isMoving = movingThisFrame;
+
+    if (GetAsyncKeyState(jumpKey) & 0x8000) {
+        if (!isCharging && !p->isJumping) {
+            isCharging = true;
+            chargeStart = GetTickCount64();
+        }
+    }
+    else {
+        if (isCharging) {
+            // [ìˆ˜ì • í¬ì¸íŠ¸ 1] ì í”„ ê²Œì´ì§€ ìµœëŒ€ì¹˜ ì œí•œ (1.0fë¥¼ ë„˜ì§€ ëª»í•¨)
+            float ratio = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
+            if (ratio > 1.0f) ratio = 1.0f;
+
+            // [ìˆ˜ì • í¬ì¸íŠ¸ 2] ì‚´ì§ ëˆ„ë¥´ë©´ ë‚®ê²Œ ë›°ë„ë¡ ìµœì†Œ ì í”„ë ¥ ë³´ì • (0.5f)
+            p->vx = ratio * MAX_JUMP_VX * moveDir[currentPlayer];
+            p->vy = -(ratio * MAX_JUMP_VY + 0.5f);
+
+            p->isJumping = true;
+            p->isMoving = false;
+            isCharging = false;
+        }
+    }
+}
+
+void Update() {
+    Player* p = &players[currentPlayer];
+    float prevY = p->y;
+
+    // [ìˆ˜ì • í¬ì¸íŠ¸ 4, 5] ë²½ í†µê³¼, ê¹œë¹¡ì„, í•˜ë°˜ì‹  ë²„ê·¸ ì›ì²œ ì°¨ë‹¨ (ìœ„ì¹˜ ê°•ì œ ê³ ì •)
+    if (p->x < 1.0f) { p->x = 1.0f; if (p->isJumping) p->vx = -p->vx * 0.5f; }
+    if (p->x > WIDTH - 3.0f) { p->x = WIDTH - 3.0f; if (p->isJumping) p->vx = -p->vx * 0.5f; }
+
+    if (p->isJumping) {
+        p->vy += GRAVITY;
+        p->x += p->vx;
+        p->y += p->vy;
+
+        // ì´ë™ í›„ ë‹¤ì‹œ ë²½ ì²´í¬
+        if (p->x < 1.0f) { p->x = 1.0f; p->vx = -p->vx * 0.5f; }
+        if (p->x > WIDTH - 3.0f) { p->x = WIDTH - 3.0f; p->vx = -p->vx * 0.5f; }
+
+        if (p->vy < 0) {
+            for (int i = 0; i < PLATFORM_COUNT; i++) {
+                Platform* pf = &platforms[i];
+                if (p->x + 2.0f >= pf->x && p->x <= pf->x + pf->width) {
+                    if (prevY >= pf->y && p->y <= pf->y) {
+                        p->y = (float)(pf->y + 1);
+                        p->vy = 0.5f;
+                        p->vx *= 0.5f;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (p->vy > 0) {
+            float hitY;
+            if (WillHitPlatform(p->x, p->y, prevY, &hitY)) {
+                p->y = hitY;
+                p->vy = 0; p->vx = 0; p->isJumping = false;
+                if (isMulti) currentPlayer = (currentPlayer + 1) % 2;
+            }
+        }
+    }
+    else {
+        float dummyY;
+        // [ìˆ˜ì • í¬ì¸íŠ¸ 6] ê±¸ì–´ê°ˆ ë•Œ í”Œë«í¼ ê°€ì¥ìë¦¬ íŒì • ì™„ë²½ ë™ê¸°í™”
+        if (!WillHitPlatform(p->x, p->y + 0.1f, p->y, &dummyY)) {
+            p->isJumping = true;
+            p->vy = 0.15f;
+            p->vx = 0;
+        }
+    }
+
+    if (p->isMoving) p->walkTimer++; else p->walkTimer = 0;
+
+    cameraY = (int)p->y - 12;
+    if (cameraY > 0) cameraY = 0;
+
+    int newZone = GetZone(p->y);
+    if (newZone != currentZone) {
+        currentZone = newZone;
+        areaNotiTimer = 120;
+    }
+}
+
+void Render() {
+    printf("\x1b[H");
+
+    for (int i = 0; i < HEIGHT; i++) {
+        int realY = cameraY + i;
+        SetZoneColor(realY);
+        move_cursor(1, i + 1);
+        printf("                                                                                                     ");
+    }
+
+    for (int i = 0; i < PLATFORM_COUNT; i++) {
+        int drawY = platforms[i].y - cameraY;
+        int zone = GetZone((float)platforms[i].y);
+
+        if (drawY >= 0 && drawY < HEIGHT) {
+            move_cursor(platforms[i].x, drawY);
+            if (zone == 0) set_bg_color(100);
+            else if (zone == 1) set_bg_color(42);
+            else { set_bg_color(107); set_font_color(30); }
+
+            if (zone == 2) {
+                printf("("); for (int j = 1; j < platforms[i].width - 1; j++) printf(" "); printf(")");
+            }
+            else {
+                for (int j = 0; j < platforms[i].width; j++) printf(" ");
+            }
+        }
+        if (drawY + 1 >= 0 && drawY + 1 < HEIGHT) {
+            move_cursor(platforms[i].x, drawY + 1);
+            if (zone == 0) set_bg_color(100);
+            else if (zone == 1) set_bg_brown();   // [ìˆ˜ì • í¬ì¸íŠ¸ 8] í™ ê°ˆìƒ‰ ì ìš©
+            else { set_bg_color(107); set_font_color(30); }
+
+            // [ìˆ˜ì • í¬ì¸íŠ¸ 9] í•˜ëŠ˜ êµ¬ë¦„ ë°‘ë¶€ë¶„ë„ ê´„í˜¸ë¡œ ì˜ˆì˜ê²Œ ë§ˆë¬´ë¦¬
+            if (zone == 2) {
+                printf("("); for (int j = 1; j < platforms[i].width - 1; j++) printf(" "); printf(")");
+            }
+            else {
+                for (int j = 0; j < platforms[i].width; j++) printf(" ");
+            }
+        }
+    }
+
+    if (isCharging) {
+        float ratio = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
+        if (ratio > 1.0f) ratio = 1.0f; // ê¶¤ì ë„ ìµœëŒ€ì¹˜ ì œí•œ
+
+        float simVx = ratio * MAX_JUMP_VX * moveDir[currentPlayer];
+        float simVy = -(ratio * MAX_JUMP_VY + 0.5f);
+
+        float simX = players[currentPlayer].x;
+        float simY = players[currentPlayer].y;
+
+        for (int k = 0; k < 60; k++) {
+            float prevSimY = simY;
+            simVy += GRAVITY;
+            simX += simVx;
+            simY += simVy;
+
+            // ê¶¤ì  ì‹œë®¬ë ˆì´ì…˜ë„ ì •í™•í•œ ë²½ ì¶©ëŒ ì ìš©
+            if (simX < 1.0f) { simX = 1.0f; simVx = -simVx * 0.5f; }
+            if (simX > WIDTH - 3.0f) { simX = WIDTH - 3.0f; simVx = -simVx * 0.5f; }
+
+            float hitY;
+            if (simVy > 0 && WillHitPlatform(simX, simY, prevSimY, &hitY)) {
+                int ix = (int)simX;
+                int iy = (int)(hitY - cameraY);
+                if (iy >= 0 && iy < HEIGHT) {
+                    SetZoneColor((int)hitY);
+                    set_font_color(91);
+                    move_cursor(ix + 1, iy); printf("X");
+                }
+                break;
+            }
+
+            int ix = (int)simX;
+            int iy = (int)(simY - cameraY);
+            if (iy >= 0 && iy < HEIGHT && k % 3 == 0) {
+                SetZoneColor((int)simY);
+                set_font_color(97);
+                move_cursor(ix + 1, iy); printf(".");
+            }
+        }
+    }
+
+    int count = isMulti ? 2 : 1;
+    for (int i = 0; i < count; i++) {
+        int drawY = (int)players[i].y - cameraY;
+        DrawCharacter((int)players[i].x, drawY, i);
+    }
+
+    SetZoneColor(cameraY + 1);
+    move_cursor(1, 1);
+    set_font_color(97);
+    char* zname = (currentZone == 0) ? "ì§€í•˜" : (currentZone == 1) ? "ì§€ìƒ" : "í•˜ëŠ˜";
+    int height_m = (27 - (int)players[currentPlayer].y) / 2;
+    printf("[%s] í˜„ì¬ ë†’ì´ : %dm", zname, height_m);
+
+    SetZoneColor(cameraY + 2); move_cursor(1, 2); printf("ESC : ë©”ë‰´ë¡œ ëŒì•„ê°€ê¸°");
+
+    if (areaNotiTimer > 0) {
+        areaNotiTimer--;
+        int cy = 10;
+        SetZoneColor(cameraY + cy);
+        set_font_color(97);
+        move_cursor(40, cy);
+        if (currentZone == 0) printf("=== [ ì§€ í•˜ ] ===");
+        else if (currentZone == 1) printf("=== [ ì§€ ìƒ ] ===");
+        else if (currentZone == 2) printf("=== [ í•˜ ëŠ˜ ] ===");
+    }
+
+    printf(COLOR_RESET);
+    fflush(stdout);
+}
+
+void RunGame(bool multi) {
+    InitGame(multi);
+    while (1) {
+        Input();
+        Update();
+        Render();
+        Sleep(16);
+
+        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
+            while (_kbhit()) _getch();
+            break;
+        }
+    }
+    clear_screen();
+}
+
+void ShowHowToPlay() {
     clear_screen();
     set_font_color(96);
+    move_cursor(45, 6); printf("ê²Œì„ ë°©ë²•");
+    printf(COLOR_RESET);
+    move_cursor(30, 8); printf("â—†=========================================â—†");
 
+    move_cursor(30, 10); printf("[ì‹±ê¸€ í”Œë ˆì´]");
+    move_cursor(30, 11); printf("A / D : ì¢Œìš° ì´ë™");
+    move_cursor(30, 12); printf("SPACE : ì í”„ ì°¨ì§•");
+
+    move_cursor(30, 14); printf("[ë©€í‹° í”Œë ˆì´]");
+    move_cursor(30, 15); printf("P1 : A / D (ì´ë™) , W (ì í”„)");
+    move_cursor(30, 16); printf("P2 : â† / â†’ (ì´ë™) , â†‘ (ì í”„)");
+
+    move_cursor(30, 18); printf("TIP");
+    move_cursor(30, 19); printf("- ì°¨ì§• ê²Œì´ì§€ì— ë¹„ë¡€í•˜ì—¬ ê¶¤ì ì´ ìë¼ë‚©ë‹ˆë‹¤.");
+    move_cursor(30, 20); printf("- ê¶¤ì  ëì˜ X í‘œì‹œì— ì •í™•íˆ ì°©ì§€í•©ë‹ˆë‹¤.");
+    move_cursor(30, 21); printf("- í…Œë§ˆë³„ë¡œ ëê¹Œì§€ ì˜¬ë¼ê°€ í•˜ëŠ˜ì— ë„ë‹¬í•´ë³´ì„¸ìš”!");
+
+    move_cursor(30, 28); printf("ESC : ë©”ë‰´ë¡œ ëŒì•„ê°€ê¸°");
+    fflush(stdout);
+    (void)_getch();
+}
+
+void RenderHall() {
+    printf("\x1b[H");
+
+    for (int i = 0; i < HEIGHT; i++) {
+        set_bg_color(40);
+        move_cursor(1, i + 1);
+        printf("                                                                                                     ");
+    }
+
+    set_font_color(96);
+    move_cursor(33, 2); printf("KMP STUDIO HALL OF FAME");
+    printf(COLOR_RESET);
+
+    set_bg_color(40);
+    move_cursor(1, 27);
+    for (int i = 0; i < WIDTH; i++) printf("=");
+
+    for (int i = 0; i < 3; i++) {
+        set_font_color(97);
+        move_cursor(npcs[i].x, npcs[i].y);     printf(" O ");
+        move_cursor(npcs[i].x, npcs[i].y + 1); printf("(|)");
+        move_cursor(npcs[i].x, npcs[i].y + 2); printf("/ \\");
+        move_cursor(npcs[i].x - 3, npcs[i].y + 4); printf("%s", npcs[i].name);
+    }
+
+    if (activeBubbleNpc != -1) {
+        NPC* n = &npcs[activeBubbleNpc];
+        int bx = n->x - 10;
+        int by = n->y - 6;
+
+        move_cursor(bx, by);     printf(" ------------------------- ");
+        move_cursor(bx, by + 1); printf("  [ "); set_font_color(96); printf("%s", n->name); set_font_color(97); printf(" ]");
+        move_cursor(bx, by + 2); printf("  %s", n->desc1);
+        move_cursor(bx, by + 3); printf("  %s", n->desc2);
+        move_cursor(bx, by + 4); printf(" ----------\\ /------------ ");
+    }
+
+    set_font_color(97);
+    move_cursor(hallX, hallY);     printf(" O ");
+    move_cursor(hallX, hallY + 1); printf("(|)");
+    move_cursor(hallX, hallY + 2);
+    if (hallIsMoving) {
+        if ((hallWalkTimer / 4) % 2 == 0) printf("/| ");
+        else                              printf(" |\\");
+    }
+    else {
+        printf("/ \\");
+    }
+
+    move_cursor(1, 1);
+    printf("A, D: ì´ë™   E: ëŒ€í™”(ON/OFF)   ESC: ì¢…ë£Œ");
+
+    if (currentNpc != -1 && activeBubbleNpc == -1) {
+        move_cursor(1, 3);
+        set_font_color(96);
+        printf("ê°€ê¹Œì´ ì™”ìŠµë‹ˆë‹¤! Eí‚¤ë¥¼ ëˆŒëŸ¬ë³´ì„¸ìš”.");
+    }
+
+    printf(COLOR_RESET);
+    fflush(stdout);
+}
+
+int GetNearNpc() {
+    for (int i = 0; i < 3; i++) {
+        if (abs(hallX - npcs[i].x) < 5) return i;
+    }
+    return -1;
+}
+
+void RunCreditHall() {
+    hallX = 10;
+    hallY = 24;
+    hallWalkTimer = 0;
+    activeBubbleNpc = -1;
+    bool ePressed = false;
+
+    while (1) {
+        hallIsMoving = false;
+
+        if (GetAsyncKeyState('A') & 0x8000) { hallX--; hallIsMoving = true; }
+        if (GetAsyncKeyState('D') & 0x8000) { hallX++; hallIsMoving = true; }
+
+        if (hallX < 1) hallX = 1;
+        if (hallX > WIDTH - 3) hallX = WIDTH - 3;
+
+        if (hallIsMoving) hallWalkTimer++;
+        else hallWalkTimer = 0;
+
+        currentNpc = GetNearNpc();
+        if (currentNpc != activeBubbleNpc) activeBubbleNpc = -1;
+
+        if (GetAsyncKeyState('E') & 0x8000) {
+            if (!ePressed && currentNpc != -1) {
+                if (activeBubbleNpc == currentNpc) activeBubbleNpc = -1;
+                else activeBubbleNpc = currentNpc;
+                ePressed = true;
+            }
+        }
+        else {
+            ePressed = false;
+        }
+
+        RenderHall();
+
+        if (hallIsMoving) Sleep(30);
+        else Sleep(16);
+
+        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
+            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
+            while (_kbhit()) _getch();
+            break;
+        }
+    }
+    clear_screen();
+}
+
+void ShowLogo() {
+    clear_screen();
+    set_font_color(96);
     move_cursor(30, 6);  printf("  .__________________________. ");
     move_cursor(30, 7);  printf(" /                            \\ ");
     move_cursor(30, 8);  printf(" |    _  __  __  __   ____    |");
@@ -168,488 +575,47 @@ void ShowLogo()
     move_cursor(30, 13); printf(" \\                            / ");
     move_cursor(30, 14); printf("  .--------------------------. ");
     move_cursor(36, 15); printf("  == KMP STUDIO ==");
-
     fflush(stdout);
     Sleep(2000);
     clear_screen();
 }
 
-void DrawCharacter(int x, int y, int index)
-{
-    Player* p = &players[index];
-
-    if (y < -2 || y > HEIGHT) return;
-
-    if (isCharging && currentPlayer == index)
-    {
-        move_cursor(x, y);     printf(" O ");
-        move_cursor(x, y + 1); printf("¦¦|¦¥");
-        move_cursor(x, y + 2); printf("/ \\");
-    }
-    else if (p->isJumping)
-    {
-        move_cursor(x, y);     printf("\\O/");
-        move_cursor(x, y + 1); printf(" |");
-        move_cursor(x, y + 2); printf("\\ /");
-    }
-    else
-    {
-        move_cursor(x, y);     printf(" O ");
-        move_cursor(x, y + 1); printf("(|)");
-        move_cursor(x, y + 2); printf("/ \\");
-    }
-}
-
-bool CheckPlatform(Player* p, float prevY)
-{
-    for (int i = 0; i < PLATFORM_COUNT; i++)
-    {
-        Platform* pf = &platforms[i];
-
-        if (p->x + 1 >= pf->x && p->x <= pf->x + pf->width)
-        {
-            if (prevY + 3 <= pf->y && p->y + 3 >= pf->y)
-            {
-                p->y = pf->y - 3;
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool TrailHitPlatform(float x, float y)
-{
-    for (int i = 0; i < PLATFORM_COUNT; i++)
-    {
-        Platform* pf = &platforms[i];
-        if (x >= pf->x && x <= pf->x + pf->width)
-        {
-            if (y >= pf->y - 1 && y <= pf->y + 1) return true;
-        }
-    }
-    return false;
-}
-
-void InitGame(bool multi)
-{
-    isMulti = multi;
-    currentPlayer = 0;
-    isCharging = false;
-    currentPower = 0;
-    cameraY = 0;
-
-    players[0].x = 10;
-    players[0].y = 24;
-    players[0].vx = 0;
-    players[0].vy = 0;
-    players[0].isJumping = false;
-
-    players[1].x = 60;
-    players[1].y = 24;
-    players[1].vx = 0;
-    players[1].vy = 0;
-    players[1].isJumping = false;
-
-    clear_screen();
-}
-
-void Input()
-{
-    Player* p = &players[currentPlayer];
-    int leftKey, rightKey, jumpKey;
-
-    if (!isMulti)
-    {
-        leftKey = 'A';
-        rightKey = 'D';
-        jumpKey = VK_SPACE;
-    }
-    else
-    {
-        if (currentPlayer == 0)
-        {
-            leftKey = 'A'; rightKey = 'D'; jumpKey = 'W';
-        }
-        else
-        {
-            leftKey = VK_LEFT; rightKey = VK_RIGHT; jumpKey = VK_UP;
-        }
-    }
-
-    if (GetAsyncKeyState(leftKey) & 0x8000)
-    {
-        moveDir[currentPlayer] = -1;
-        if (!isCharging && !p->isJumping) p->x -= 1.0f;
-    }
-
-    if (GetAsyncKeyState(rightKey) & 0x8000)
-    {
-        moveDir[currentPlayer] = 1;
-        if (!isCharging && !p->isJumping) p->x += 1.0f;
-    }
-
-    if (GetAsyncKeyState(jumpKey) & 0x8000)
-    {
-        if (!isCharging && !p->isJumping)
-        {
-            isCharging = true;
-            chargeStart = GetTickCount64();
-        }
-    }
-    else
-    {
-        if (isCharging)
-        {
-            ULONGLONG t = GetTickCount64() - chargeStart;
-            if (t > MAX_GAUGE) t = MAX_GAUGE;
-
-            currentPower = (float)t / MAX_GAUGE;
-            currentPower = currentPower * currentPower;
-
-            p->vx = currentPower * 2.8f * moveDir[currentPlayer];
-            p->vy = -(currentPower * 13.5f);
-            p->isJumping = true;
-            isCharging = false;
-        }
-    }
-}
-
-void Update()
-{
-    Player* p = &players[currentPlayer];
-
-    if (p->isJumping)
-    {
-        float prevY = p->y;
-        p->vy += 0.15f;
-        p->x += p->vx;
-        p->y += p->vy;
-
-        if (p->vy > 0)
-        {
-            if (CheckPlatform(p, prevY))
-            {
-                p->vy = 0;
-                p->vx = 0;
-                p->isJumping = false;
-
-                if (isMulti)
-                {
-                    currentPlayer = (currentPlayer + 1) % 2;
-                }
-            }
-        }
-    }
-
-    if (p->x < 0) p->x = 0;
-    if (p->x > WIDTH - 4) p->x = WIDTH - 4;
-
-    cameraY = (int)p->y - 12;
-    if (cameraY > 0) cameraY = 0;
-}
-
-void Render()
-{
-    // [¼öÁ¤ Æ÷ÀÎÆ® 1,2] È­¸é ÀüÃ¼¸¦ °ø¹éÀ¸·Î µ¤¾î¾²±â (ÀÜ»ó ¹æÁö)
-    printf("\x1b[H");
-
-    for (int i = 0; i < HEIGHT; i++)
-    {
-        move_cursor(1, i + 1);
-        printf("                                                                                                    ");
-    }
-
-    for (int i = 0; i < PLATFORM_COUNT; i++)
-    {
-        int drawY = platforms[i].y - cameraY;
-        if (drawY >= 0 && drawY < HEIGHT)
-        {
-            move_cursor(platforms[i].x, drawY);
-            for (int j = 0; j < platforms[i].width; j++) printf("=");
-        }
-    }
-
-    int count = isMulti ? 2 : 1;
-
-    if (isCharging)
-    {
-        float power = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
-        if (power > 1) power = 1;
-        power = power * power;
-
-        float vx = power * 2.8f * moveDir[currentPlayer];
-        float vy = -(power * 13.5f);
-        float simX = players[currentPlayer].x;
-        float simY = players[currentPlayer].y;
-
-        for (int k = 0; k < 60; k++)
-        {
-            vy += 0.15f;
-            simX += vx;
-            simY += vy;
-
-            if (TrailHitPlatform(simX, simY + 3)) break;
-
-            int ix = (int)simX;
-            int iy = (int)(simY - cameraY);
-
-            if (iy >= 0 && iy < HEIGHT)
-            {
-                move_cursor(ix, iy);
-                printf(".");
-            }
-        }
-    }
-
-    for (int i = 0; i < count; i++)
-    {
-        int drawY = (int)players[i].y - cameraY;
-        DrawCharacter((int)players[i].x, drawY, i);
-    }
-
-    move_cursor(1, 1);
-    printf("%s", isMulti ? "¸ÖÆ¼ ¸ğµå" : "½Ì±Û ¸ğµå");
-    move_cursor(1, 2);
-    printf("³ôÀÌ : %d", -cameraY);
-    move_cursor(1, 3);
-    printf("ESC : ¸Ş´º·Î µ¹¾Æ°¡±â");
-
-    // È­¸é Ãâ·ÂÀ» ÇÑ ¹ø¿¡ ¹æÃâ (±ôºıÀÓ ¿Ïº® Á¦°Å)
-    fflush(stdout);
-}
-
-void RunGame(bool multi)
-{
-    InitGame(multi);
-
-    while (1)
-    {
-        Input();
-        Update();
-        Render();
-        Sleep(16);
-
-        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000)
-        {
-            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
-            while (_kbhit()) _getch();
-            break;
-        }
-    }
-    clear_screen();
-}
-
-void ShowHowToPlay()
-{
+void DrawMenu(int menu) {
     clear_screen();
     set_font_color(96);
-    move_cursor(45, 6); printf("°ÔÀÓ ¹æ¹ı");
-    printf(COLOR_RESET);
-    move_cursor(30, 8); printf("¡ß=========================================¡ß");
-
-    move_cursor(30, 10); printf("[½Ì±Û ÇÃ·¹ÀÌ]");
-    move_cursor(30, 11); printf("A / D : ÁÂ¿ì ÀÌµ¿");
-    move_cursor(30, 12); printf("SPACE : Á¡ÇÁ Â÷Â¡");
-
-    move_cursor(30, 14); printf("[¸ÖÆ¼ ÇÃ·¹ÀÌ]");
-    move_cursor(30, 15); printf("P1 : A / D / W");
-    move_cursor(30, 16); printf("P2 : J / L / I");
-
-    move_cursor(30, 18); printf("TIP");
-    move_cursor(30, 19); printf("- Á¡ÇÁÅ· ½ºÅ¸ÀÏ·Î À§·Î °è¼Ó ¿Ã¶ó°©´Ï´Ù");
-    move_cursor(30, 20); printf("- ¹ßÆÇ À§¿¡ Á¤È®È÷ ÂøÁöÇØ¾ß ÇÕ´Ï´Ù");
-    move_cursor(30, 21); printf("- Â÷Â¡ ¼¼±â¿¡ µû¶ó ³ôÀÌ°¡ ´Ş¶óÁı´Ï´Ù");
-
-    move_cursor(30, 28); printf("ESC : ¸Ş´º·Î µ¹¾Æ°¡±â");
-    fflush(stdout);
-    (void)_getch();
-}
-
-// =====================
-// Å©·¹µ÷ (¸í¿¹ÀÇ Àü´ç)
-// =====================
-void RenderHall()
-{
-    // [¼öÁ¤ Æ÷ÀÎÆ® 1,2] È­¸é ÀüÃ¼¸¦ °ø¹éÀ¸·Î µ¤¾î¾²±â (ÀÜ»ó ¹æÁö)
-    printf("\x1b[H");
-
-    for (int i = 0; i < HEIGHT; i++)
-    {
-        move_cursor(1, i + 1);
-        printf("                                                                                                    ");
-    }
-
-    set_font_color(96);
-    move_cursor(33, 2); printf("KMP STUDIO HALL OF FAME");
-    printf(COLOR_RESET);
-
-    move_cursor(1, 27);
-    for (int i = 0; i < WIDTH; i++) printf("=");
-
-    // NPC Ãâ·Â
-    for (int i = 0; i < 3; i++)
-    {
-        move_cursor(npcs[i].x, npcs[i].y);     printf(" O ");
-        move_cursor(npcs[i].x, npcs[i].y + 1); printf("(|)");
-        move_cursor(npcs[i].x, npcs[i].y + 2); printf("/ \\");
-        move_cursor(npcs[i].x - 3, npcs[i].y + 4); printf("%s", npcs[i].name);
-    }
-
-    // [¼öÁ¤ Æ÷ÀÎÆ® 4] E Å°¸¦ ´­·¯ È°¼ºÈ­µÈ ¸»Ç³¼±ÀÌ ÀÖÀ¸¸é NPC À§¿¡ Ãâ·Â
-    if (activeBubbleNpc != -1)
-    {
-        NPC* n = &npcs[activeBubbleNpc];
-        int bx = n->x - 10;
-        int by = n->y - 6;
-
-        move_cursor(bx, by);     printf(" ------------------------- ");
-        move_cursor(bx, by + 1); printf("  [ "); set_font_color(96); printf("%s", n->name); printf(COLOR_RESET); printf(" ]");
-        move_cursor(bx, by + 2); printf("  %s", n->desc1);
-        move_cursor(bx, by + 3); printf("  %s", n->desc2);
-        move_cursor(bx, by + 4); printf(" ----------\\ /------------ ");
-    }
-
-    // ÇÃ·¹ÀÌ¾î Ãâ·Â
-    move_cursor(hallX, hallY);     printf("\\O/");
-    move_cursor(hallX, hallY + 1); printf(" | ");
-    move_cursor(hallX, hallY + 2); printf("/ \\");
-
-    // UI ¹®±¸ Ãâ·Â
-    move_cursor(1, 1);
-    printf("A, D: ÀÌµ¿   E: ´ëÈ­(ON/OFF)   ESC: Á¾·á");
-
-    // ´Ù°¡°¡¸é »ó´Ü ¾È³» Ãß°¡
-    if (currentNpc != -1 && activeBubbleNpc == -1)
-    {
-        move_cursor(1, 3);
-        set_font_color(96);
-        printf("°¡±îÀÌ ¿Ô½À´Ï´Ù! EÅ°¸¦ ´­·¯º¸¼¼¿ä.");
-        printf(COLOR_RESET);
-    }
-
-    fflush(stdout); // ±ôºıÀÓ ¹æÁö¸¦ À§ÇØ È­¸é Ãâ·ÂÀ» ÇÑ ¹ø¿¡ ½ô
-}
-
-int GetNearNpc()
-{
-    for (int i = 0; i < 3; i++)
-    {
-        if (abs(hallX - npcs[i].x) < 5) return i;
-    }
-    return -1;
-}
-
-void RunCreditHall()
-{
-    hallX = 10;
-    hallY = 24;
-    activeBubbleNpc = -1; // ÁøÀÔ ½Ã ´ëÈ­ ÃÊ±âÈ­
-
-    // Å° ¿¬¼Ó ÀÔ·Â ¹æÁö¿ë º¯¼ö
-    bool ePressed = false;
-
-    while (1)
-    {
-        bool moved = false;
-
-        if (GetAsyncKeyState('A') & 0x8000)
-        {
-            hallX--;
-            moved = true;
-        }
-
-        if (GetAsyncKeyState('D') & 0x8000)
-        {
-            hallX++;
-            moved = true;
-        }
-
-        if (hallX < 1) hallX = 1;
-        if (hallX > WIDTH - 3) hallX = WIDTH - 3;
-
-        currentNpc = GetNearNpc();
-
-        // NPC¿¡°Ô¼­ ¸Ö¾îÁö¸é ÀÚµ¿À¸·Î ¸»Ç³¼± ´İ±â
-        if (currentNpc != activeBubbleNpc)
-        {
-            activeBubbleNpc = -1;
-        }
-
-        // [¼öÁ¤ Æ÷ÀÎÆ® 4] E Å° Åä±Û ±â´É (¸»Ç³¼± ON/OFF)
-        if (GetAsyncKeyState('E') & 0x8000)
-        {
-            if (!ePressed && currentNpc != -1) // E Å°¸¦ ¹æ±İ ¸· ´­·¶À» ¶§¸¸
-            {
-                if (activeBubbleNpc == currentNpc)
-                    activeBubbleNpc = -1; // ÄÑÁ® ÀÖÀ¸¸é ²ô±â
-                else
-                    activeBubbleNpc = currentNpc; // ²¨Á® ÀÖÀ¸¸é ÄÑ±â
-
-                ePressed = true;
-            }
-        }
-        else
-        {
-            ePressed = false; // E Å°¸¦ ¶ÃÀ» ¶§ ¸®¼Â
-        }
-
-        RenderHall();
-
-        if (moved) Sleep(30);
-        else Sleep(16);
-
-        if (GetAsyncKeyState(VK_ESCAPE) & 0x8000)
-        {
-            while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
-            while (_kbhit()) _getch();
-            break;
-        }
-    }
-    clear_screen();
-}
-
-void DrawMenu(int menu)
-{
-    clear_screen();
-    set_font_color(96);
-    move_cursor(32, 6); printf("¡ß==== ASCII JUMP GAME ====¡ß");
+    move_cursor(32, 6); printf("â—†==== ASCII JUMP GAME ====â—†");
     printf(COLOR_RESET);
 
     move_cursor(38, 10);
-    if (menu == 0) { set_bg_color(43); set_font_color(30); printf(" ¢º ½Ì±Û °ÔÀÓ "); }
-    else { printf(" ½Ì±Û °ÔÀÓ "); }
+    if (menu == 0) { set_bg_color(43); set_font_color(30); printf(" â–¶ ì‹±ê¸€ ê²Œì„ "); }
+    else { printf(" ì‹±ê¸€ ê²Œì„ "); }
     printf(COLOR_RESET);
 
     move_cursor(38, 12);
-    if (menu == 1) { set_bg_color(43); set_font_color(30); printf(" ¢º ¸ÖÆ¼ °ÔÀÓ "); }
-    else { printf(" ¸ÖÆ¼ °ÔÀÓ "); }
+    if (menu == 1) { set_bg_color(43); set_font_color(30); printf(" â–¶ ë©€í‹° ê²Œì„ "); }
+    else { printf(" ë©€í‹° ê²Œì„ "); }
     printf(COLOR_RESET);
 
     move_cursor(38, 14);
-    if (menu == 2) { set_bg_color(43); set_font_color(30); printf(" ¢º ÇÃ·¹ÀÌ ¹æ¹ı "); }
-    else { printf(" ÇÃ·¹ÀÌ ¹æ¹ı "); }
+    if (menu == 2) { set_bg_color(43); set_font_color(30); printf(" â–¶ í”Œë ˆì´ ë°©ë²• "); }
+    else { printf(" í”Œë ˆì´ ë°©ë²• "); }
     printf(COLOR_RESET);
 
     move_cursor(38, 16);
-    if (menu == 3) { set_bg_color(43); set_font_color(30); printf(" ¢º Å©·¹µ÷ "); }
-    else { printf(" Å©·¹µ÷ "); }
+    if (menu == 3) { set_bg_color(43); set_font_color(30); printf(" â–¶ í¬ë ˆë”§ "); }
+    else { printf(" í¬ë ˆë”§ "); }
     printf(COLOR_RESET);
 
     move_cursor(38, 18);
-    if (menu == 4) { set_bg_color(43); set_font_color(30); printf(" ¢º ³ª°¡±â"); }
-    else { printf(" ³ª°¡±â "); }
+    if (menu == 4) { set_bg_color(43); set_font_color(30); printf(" â–¶ ë‚˜ê°€ê¸°"); }
+    else { printf(" ë‚˜ê°€ê¸° "); }
     printf(COLOR_RESET);
 
     fflush(stdout);
 }
 
-int main()
-{
-    // [¼öÁ¤ Æ÷ÀÎÆ® 1,2] ÄÜ¼Ö Ã¢ Å©±â¸¦ °íÁ¤½ÃÄÑ ±ÛÀÚ°¡ ÁÙ ¹Ù²Ş µÇ¸é¼­ ½ºÅ©·ÑÀÌ ¿Ã¶ó°¡´Â Çö»ó ¿øÃµ Â÷´Ü
+int main() {
     system("mode con cols=105 lines=32");
-
-    // [¼öÁ¤ Æ÷ÀÎÆ® 1] printf°¡ ÄÜ¼Ö¿¡ ¹Ù·Î Ãâ·ÂµÇÁö ¾Ê°í, ¹öÆÛ¿¡ ¸ğ¿´´Ù°¡ fflushÇÒ ¶§ ÇÑ ¹ø¿¡ ½î°Ô ¸¸µê (È­¸é ±ôºıÀÓ ¿Ïº® Á¦°Å)
     setvbuf(stdout, NULL, _IOFBF, 8192);
 
     int menu = 0;
@@ -658,16 +624,14 @@ int main()
     hide_cursor();
     ShowLogo();
 
-    while (1)
-    {
+    while (1) {
         DrawMenu(menu);
         input = _getch();
 
         if (input == 27) break;
         if (input == 'w' || input == 'W') { if (menu > 0) menu--; }
         if (input == 's' || input == 'S') { if (menu < 4) menu++; }
-        if (input == ' ')
-        {
+        if (input == ' ') {
             if (menu == 0) RunGame(false);
             else if (menu == 1) RunGame(true);
             else if (menu == 2) ShowHowToPlay();
