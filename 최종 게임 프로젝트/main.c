@@ -5,6 +5,8 @@
 #include <conio.h>
 #include <Windows.h>
 #include <stdbool.h>
+#include <mmsystem.h>
+#pragma comment(lib, "winmm.lib")
 
 // =====================================================
 // KMP STUDIO - ASCII JUMP GAME
@@ -223,6 +225,10 @@ void Input() {
             p->isJumping = true;
             p->isMoving = false;
             isCharging = false;
+
+            PlaySound(TEXT("jump.wav"),
+                NULL,
+                SND_ASYNC | SND_FILENAME);
         }
     }
 }
@@ -264,6 +270,10 @@ void Update() {
                 p->y = hitY;
                 p->vy = 0; p->vx = 0; p->isJumping = false;
                 if (isMulti) currentPlayer = (currentPlayer + 1) % 2;
+
+                PlaySound(TEXT("land.wav"),
+                    NULL,
+                    SND_ASYNC | SND_FILENAME);
             }
         }
     }
@@ -576,6 +586,9 @@ void ShowLogo() {
     move_cursor(30, 14); printf("  .--------------------------. ");
     move_cursor(36, 15); printf("  == KMP STUDIO ==");
     fflush(stdout);
+    PlaySound(TEXT("logo.wav"),
+        NULL,
+        SND_ASYNC | SND_FILENAME);
     Sleep(2000);
     clear_screen();
 }
@@ -638,6 +651,9 @@ int main() {
             else if (menu == 3) RunCreditHall();
             else if (menu == 4) break;
         }
+        PlaySound(TEXT("menu.wav"),
+            NULL,
+            SND_ASYNC | SND_FILENAME);
     }
 
     show_cursor();
