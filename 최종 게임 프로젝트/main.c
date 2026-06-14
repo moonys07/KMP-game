@@ -9,14 +9,13 @@
 #pragma comment(lib, "winmm.lib")
 
 // =====================================================
-// KMP STUDIO - ASCII JUMP GAME
+// KMP STUDIO - ASCII JUMP GAME (Refined Rendering)
 // =====================================================
 
 #define WIDTH 120
 #define HEIGHT 30
 
 #define MAX_GAUGE 1000.0f
-// [수정 포인트 2] 플랫폼 갯수를 64개로 늘리고 다양한 구조 추가
 #define PLATFORM_COUNT 64
 
 #define GRAVITY 0.20f
@@ -35,7 +34,6 @@ typedef struct {
     int walkTimer;
 } Player;
 
-// [수정 포인트 2 & 3] height 속성을 추가하여 벽돌, ㄱ자 등 다양한 두께/구조 구현
 typedef struct {
     int x;
     int y;
@@ -78,19 +76,18 @@ NPC npcs[3] = {
     { 95, 24, "박정원", "게임 총괄", "크레딧 시스템 제작" }
 };
 
-// [수정 포인트 2] 벽돌과 L자(ㄱ, ㄴ) 모양의 구조물들을 추가하여 맵을 입체적으로 구성
 Platform platforms[PLATFORM_COUNT] = {
     // 지하 (Underground)
     {0, 27, WIDTH, 4},
     {30, 23, 15, 2},
-    {30, 19, 2, 4},          // 좌측 기둥 (L자형 구조 생성)
+    {30, 19, 2, 4},
     {80, 19, 10, 2},
     {45, 15, 12, 2},
     {15, 11, 10, 2},
     {65, 7, 10, 2},
     {95, 3, 10, 2},
     {50, -1, 12, 2},
-    {50, -5, 2, 4},          // 좌측 기둥
+    {50, -5, 2, 4},
     {20, -5, 10, 2},
     {85, -9, 10, 2},
     {30, -13, 10, 2},
@@ -99,13 +96,13 @@ Platform platforms[PLATFORM_COUNT] = {
     {45, -25, 12, 2},
     {15, -31, 15, 2},
     {80, -37, 15, 2},
-    {93, -40, 2, 3},         // 우측 절벽 기둥
+    {93, -40, 2, 3},
 
     // 지상 (Ground)
     {35, -43, 10, 2},
     {90, -47, 12, 2},
     {25, -51, 10, 2},
-    {25, -55, 2, 4},         // 벽면 구조물
+    {25, -55, 2, 4},
     {70, -55, 12, 2},
     {15, -59, 15, 2},
     {55, -63, 10, 2},
@@ -117,7 +114,7 @@ Platform platforms[PLATFORM_COUNT] = {
     {20, -87, 12, 2},
     {70, -91, 10, 2},
     {95, -95, 15, 2},
-    {95, -99, 2, 4},         // 벽면 구조물
+    {95, -99, 2, 4},
     {35, -99, 10, 2},
     {80, -103, 10, 2},
     {25, -107, 12, 2},
@@ -131,7 +128,7 @@ Platform platforms[PLATFORM_COUNT] = {
     {70, -137, 10, 2},
     {20, -143, 10, 2},
     {85, -149, 10, 2},
-    {85, -153, 2, 4},        // 기둥 구조물
+    {85, -153, 2, 4},
     {45, -155, 15, 2},
     {95, -161, 10, 2},
     {30, -167, 10, 2},
@@ -144,7 +141,7 @@ Platform platforms[PLATFORM_COUNT] = {
     {50, -209, 10, 2},
     {90, -215, 12, 2},
     {30, -221, 10, 2},
-    {30, -225, 2, 4},        // 벽면 구조물
+    {30, -225, 2, 4},
     {75, -227, 15, 2},
     {20, -233, 10, 2},
     {45, -240, 20, 2}
@@ -176,58 +173,21 @@ void SetZoneColor(int y) {
     else set_bg_color(106);
 }
 
+// [버그 수정 포인트 1 & 2] 캐릭터 파트 렌더링 함수 전면 수정
 void DrawPart(int screenX, int screenY, float worldY, int playerIndex, const char* str) {
     if (screenY < 0 || screenY >= HEIGHT || screenX < 1 || screenX > WIDTH) return;
 
-    int bgColor = -1;
-    bool isBrown = false;
+    // 캐릭터 배경은 항상 해당 행(Row)의 순수 맵 배경색을 그대로 따라가도록 고정
+    // 기존의 플랫폼 체크 루프를 완벽히 제거하여 벽 비빔 현상 및 경계선 버그 차단
+    SetZoneColor(cameraY + screenY);
 
-    // [수정 포인트 2] height 속성 반영하여 구조물 렌더링 지원
-    for (int i = 0; i < PLATFORM_COUNT; i++) {
-        int py = platforms[i].y - cameraY;
-        int ph = platforms[i].height;
-        if (screenY >= py && screenY < py + ph) {
-            if (screenX >= platforms[i].x && screenX < platforms[i].x + platforms[i].width) {
-                int zone = GetZone((float)platforms[i].y);
-                if (screenY == py) { // 구조물 상단(지표면)
-                    if (zone == 0) bgColor = 100;
-                    else if (zone == 1) bgColor = 42;
-                    else bgColor = 107;
-                }
-                else { // 구조물 내부(흙 등)
-                    if (zone == 0) bgColor = 100;
-                    else if (zone == 1) { isBrown = true; bgColor = 0; }
-                    else bgColor = 107;
-                }
-                break;
-            }
-        }
-    }
-
-    if (bgColor != -1) {
-        if (bgColor == 107) set_bg_color(107);
-        else set_bg_color(bgColor);
-    }
-    else if (isBrown) {
-        set_bg_brown();
+    // 플레이어 색상 지정
+    if (isMulti) {
+        if (playerIndex == 0) set_font_color(92);
+        else set_font_color(93);
     }
     else {
-        // [수정 포인트 1] 캐릭터가 경계선에 걸칠 때 몸통/다리의 배경색이 깨지던 버그 해결
-        // 캐릭터의 worldY 대신 실제 화면의 스크린Y 좌표로 배경색을 맞춰 이질감을 없앰
-        SetZoneColor(cameraY + screenY);
-    }
-
-    if (bgColor == 107) {
-        set_font_color(30);
-    }
-    else {
-        if (isMulti) {
-            if (playerIndex == 0) set_font_color(92);
-            else set_font_color(93);
-        }
-        else {
-            set_font_color(97);
-        }
+        set_font_color(97);
     }
 
     move_cursor(screenX, screenY);
@@ -266,7 +226,6 @@ void DrawCharacter(int x, int y, int index) {
     printf(COLOR_RESET);
 }
 
-// [수정 포인트 3] 범용 AABB 충돌 검사 함수 (측면 및 하단 충돌 완벽 지원)
 bool CheckCollision(float px, float py) {
     for (int i = 0; i < PLATFORM_COUNT; i++) {
         Platform* pf = &platforms[i];
@@ -300,29 +259,49 @@ void Input() {
 
     bool movingThisFrame = false;
 
-    if (GetAsyncKeyState(leftKey) & 0x8000) {
-        moveDir[currentPlayer] = -1;
-        if (!isCharging && !p->isJumping) { p->x -= 1.0f; movingThisFrame = true; }
+    if (p->isJumping && isCharging) {
+        isCharging = false;
     }
-    if (GetAsyncKeyState(rightKey) & 0x8000) {
-        moveDir[currentPlayer] = 1;
-        if (!isCharging && !p->isJumping) { p->x += 1.0f; movingThisFrame = true; }
+
+    if (!p->isJumping) {
+        if (isCharging) {
+            p->vx = 0.0f;
+            movingThisFrame = false;
+
+            if (GetAsyncKeyState(leftKey) & 0x8000) moveDir[currentPlayer] = -1;
+            if (GetAsyncKeyState(rightKey) & 0x8000) moveDir[currentPlayer] = 1;
+        }
+        else {
+            p->vx = 0.0f;
+            if (GetAsyncKeyState(leftKey) & 0x8000) {
+                moveDir[currentPlayer] = -1;
+                p->vx = -1.0f;
+                movingThisFrame = true;
+            }
+            if (GetAsyncKeyState(rightKey) & 0x8000) {
+                moveDir[currentPlayer] = 1;
+                p->vx = 1.0f;
+                movingThisFrame = true;
+            }
+        }
+    }
+    else {
+        if (GetAsyncKeyState(leftKey) & 0x8000) moveDir[currentPlayer] = -1;
+        if (GetAsyncKeyState(rightKey) & 0x8000) moveDir[currentPlayer] = 1;
     }
 
     p->isMoving = movingThisFrame;
 
-    // [수정 포인트 4] 최대 차징 시 자동으로 점프되는 현상 수정 (키를 뗄 때만 점프)
     if (GetAsyncKeyState(jumpKey) & 0x8000) {
         if (!isCharging && !p->isJumping) {
             isCharging = true;
             chargeStart = GetTickCount64();
         }
-        // 키를 꾹 누르고 있는 동안에는 아무것도 하지 않음 (궤적만 렌더링됨)
     }
     else {
         if (isCharging) {
             float ratio = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
-            if (ratio > 1.0f) ratio = 1.0f; // 최대치 도달 시 1.0으로 고정
+            if (ratio > 1.0f) ratio = 1.0f;
 
             p->vx = ratio * MAX_JUMP_VX * moveDir[currentPlayer];
             p->vy = -(ratio * MAX_JUMP_VY + 0.8f);
@@ -340,14 +319,15 @@ void Update() {
     float prevX = p->x;
     float prevY = p->y;
 
-    // [수정 포인트 3] X/Y축 물리 엔진 분리 및 측면(옆면) 벽 충돌(튕김) 적용
     p->x += p->vx;
+
     if (p->x < 1.0f) { p->x = 1.0f; if (p->isJumping) p->vx = -p->vx * 0.5f; }
     if (p->x > WIDTH - 3.0f) { p->x = WIDTH - 3.0f; if (p->isJumping) p->vx = -p->vx * 0.5f; }
 
     if (CheckCollision(p->x, prevY)) {
         p->x = prevX;
-        p->vx = -p->vx * 0.5f; // 벽에 부딪히면 튕김
+        if (p->isJumping) p->vx = -p->vx * 0.5f;
+        else p->vx = 0.0f;
     }
 
     if (p->isJumping) {
@@ -356,11 +336,10 @@ void Update() {
 
         bool landed = false;
 
-        if (p->vy > 0) { // 아래로 떨어질 때 (바닥 충돌 판정)
+        if (p->vy > 0) {
             for (int i = 0; i < PLATFORM_COUNT; i++) {
                 Platform* pf = &platforms[i];
                 if (p->x + 2.0f >= pf->x && p->x <= pf->x + pf->width - 1) {
-                    // 발끝이 플랫폼 표면을 통과했는지 체크
                     if (prevY + 2.0f <= pf->y && p->y + 2.0f >= pf->y) {
                         p->y = (float)(pf->y - 3);
                         p->vy = 0; p->vx = 0; p->isJumping = false;
@@ -373,15 +352,14 @@ void Update() {
                 }
             }
         }
-        else if (p->vy < 0) { // 위로 올라갈 때 (천장 충돌 판정)
+        else if (p->vy < 0) {
             for (int i = 0; i < PLATFORM_COUNT; i++) {
                 Platform* pf = &platforms[i];
                 if (p->x + 2.0f >= pf->x && p->x <= pf->x + pf->width - 1) {
                     float bottom = pf->y + pf->height - 1;
-                    // 머리가 플랫폼 아랫면을 때렸는지 체크
                     if (prevY >= bottom && p->y <= bottom) {
                         p->y = bottom + 1.0f;
-                        p->vy = 0.5f; // 머리 부딪히면 아래로 떨어지기 시작
+                        p->vy = 0.5f;
                         p->vx *= 0.5f;
                         break;
                     }
@@ -389,18 +367,28 @@ void Update() {
             }
         }
 
-        // 혹시 모를 내부 끼임 보정
         if (!landed && CheckCollision(p->x, p->y)) {
             p->y = prevY;
             p->vy = 0;
         }
     }
     else {
-        // 낭떠러지에서 걸어 떨어질 때 처리
-        if (!CheckCollision(p->x, p->y + 0.1f)) {
+        bool onGround = false;
+        float checkY = p->y + 3.0f;
+
+        for (int i = 0; i < PLATFORM_COUNT; i++) {
+            Platform* pf = &platforms[i];
+            if (p->x + 2.0f >= pf->x && p->x <= pf->x + pf->width - 1) {
+                if (checkY >= pf->y && checkY <= pf->y + pf->height - 1) {
+                    onGround = true;
+                    break;
+                }
+            }
+        }
+
+        if (!onGround) {
             p->isJumping = true;
-            p->vy = 0.15f;
-            p->vx = 0;
+            p->vy = 0.0f;
         }
     }
 
@@ -426,7 +414,6 @@ void Render() {
         for (int j = 0; j < WIDTH; j++) putchar(' ');
     }
 
-    // [수정 포인트 2] 플랫폼 높이(height) 반영 렌더링
     for (int i = 0; i < PLATFORM_COUNT; i++) {
         int zone = GetZone((float)platforms[i].y);
 
@@ -452,7 +439,6 @@ void Render() {
         }
     }
 
-    // [수정 포인트 5] 궤적 시스템에 실제 게임과 동일한 충돌/튕김 물리 엔진 적용
     if (isCharging) {
         float ratio = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
         if (ratio > 1.0f) ratio = 1.0f;
@@ -468,7 +454,6 @@ void Render() {
             float prevSimY = simY;
             simVy += GRAVITY;
 
-            // 시뮬레이션 X축 이동 및 벽 충돌
             simX += simVx;
             if (simX < 1.0f) { simX = 1.0f; simVx = -simVx * 0.5f; }
             if (simX > WIDTH - 3.0f) { simX = WIDTH - 3.0f; simVx = -simVx * 0.5f; }
@@ -478,13 +463,12 @@ void Render() {
                 if (simX + 2.0f >= pf->x && simX <= pf->x + pf->width - 1) {
                     if (prevSimY + 2.0f >= pf->y && prevSimY <= pf->y + pf->height - 1) {
                         simX = prevSimX;
-                        simVx = -simVx * 0.5f; // 벽에 부딪힌 궤적 반사
+                        simVx = -simVx * 0.5f;
                         break;
                     }
                 }
             }
 
-            // 시뮬레이션 Y축 이동 및 상하 충돌
             simY += simVy;
             bool hitFloor = false;
 
@@ -493,7 +477,7 @@ void Render() {
                     Platform* pf = &platforms[i];
                     if (simX + 2.0f >= pf->x && simX <= pf->x + pf->width - 1) {
                         if (prevSimY + 2.0f <= pf->y && simY + 2.0f >= pf->y) {
-                            simY = pf->y - 3.0f; // 바닥 안착
+                            simY = pf->y - 3.0f;
                             hitFloor = true;
                             break;
                         }
@@ -506,7 +490,7 @@ void Render() {
                     if (simX + 2.0f >= pf->x && simX <= pf->x + pf->width - 1) {
                         float bottom = pf->y + pf->height - 1;
                         if (prevSimY >= bottom && simY <= bottom) {
-                            simY = bottom + 1.0f; // 천장 충돌 궤적 꺾임
+                            simY = bottom + 1.0f;
                             simVy = 0.5f;
                             simVx *= 0.5f;
                             break;
@@ -613,7 +597,6 @@ void ShowHowToPlay() {
     (void)_getch();
 }
 
-// [수정 포인트 7] 크레딧 룸 꾸미기 (단상, 레드카펫, 상단 별 장식 추가)
 void RenderHall() {
     printf("\x1b[H");
 
@@ -623,12 +606,10 @@ void RenderHall() {
         for (int j = 0; j < WIDTH; j++) putchar(' ');
     }
 
-    // 상단 별빛 장식
     move_cursor(1, 1);
     set_font_color(93);
     for (int i = 0; i < WIDTH; i++) printf(i % 3 == 0 ? "*" : " ");
 
-    // 바닥 레드카펫 및 무대
     move_cursor(1, 26);
     set_bg_color(41);
     for (int i = 0; i < WIDTH; i++) printf(" ");
@@ -652,7 +633,6 @@ void RenderHall() {
 
         move_cursor(npcs[i].x, npcs[i].y + 2); printf("/"); move_cursor(npcs[i].x + 2, npcs[i].y + 2); printf("\\");
 
-        // NPC 전용 단상
         set_font_color(90);
         move_cursor(npcs[i].x - 2, npcs[i].y + 3); printf("=======");
 
@@ -801,7 +781,6 @@ void DrawMenu(int menu) {
         if (j % 4 == 0) putchar('%'); else if (j % 7 == 0) putchar('.'); else putchar(' ');
     }
 
-    // [수정 포인트 6] 구름 아트 변경
     set_bg_color(104); set_font_color(97);
     move_cursor(23, 7); printf("     _ .--.      ");
     move_cursor(21, 8); printf("   (         )-.   ");
