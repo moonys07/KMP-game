@@ -609,6 +609,7 @@ void Render() {
 
 void RunGame(bool multi) {
     InitGame(multi);
+
     while (1) {
         // 완주 상태가 아닐 때만 입력 및 물리 연산 수행
         if (!gameFinished) {
