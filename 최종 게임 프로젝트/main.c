@@ -63,6 +63,13 @@ int cameraY = 0;
 int currentZone = -1;
 int areaNotiTimer = 0;
 
+// 현재 재생 중인 맵 BGM 구역을 저장하는 변수
+// -1 = 아직 맵 BGM이 재생되지 않은 상태
+//  0 = 지하 BGM
+//  1 = 지상 BGM
+//  2 = 하늘 BGM
+int currentMapBgmZone = -1;
+
 // [추가] 타이머 및 게임 종료 관련 변수
 ULONGLONG playTime[2] = { 0, 0 }; // 각 플레이어의 누적 활성 시간 (ms)
 ULONGLONG lastFrameTime = 0;      // 델타 타임 계산용
@@ -326,6 +333,76 @@ void Input() {
     }
 }
 
+// =====================
+// 맵별 배경음악 함수
+// =====================
+
+// 현재 재생 중인 맵 BGM을 정지하고 닫는 함수
+void StopMapBGM() {
+    // mapbgm이라는 별칭으로 재생 중인 음악 정지
+    mciSendStringA("stop mapbgm", NULL, 0, NULL);
+
+    // 열려 있는 mapbgm 파일 닫기
+    mciSendStringA("close mapbgm", NULL, 0, NULL);
+}
+
+// 특정 파일을 맵 BGM으로 반복 재생하는 함수
+void StartMapBGM(const char* filename) {
+    char command[256];
+    MCIERROR err;
+    char errorText[256];
+
+    // 기존 맵 BGM이 재생 중이면 먼저 정지
+    StopMapBGM();
+
+    // mp3 파일을 mapbgm이라는 별칭으로 열기
+    // mp3는 type mpegvideo를 사용하는 것이 안정적임
+    sprintf(command, "open \"%s\" type mpegvideo alias mapbgm", filename);
+    err = mciSendStringA(command, NULL, 0, NULL);
+
+    // BGM 파일 열기에 실패했을 때 오류창 출력
+    if (err != 0) {
+        mciGetErrorStringA(err, errorText, sizeof(errorText));
+        MessageBoxA(NULL, errorText, "Map BGM open 실패", MB_OK);
+        return;
+    }
+
+    // 맵 BGM 볼륨 설정
+    // 숫자를 낮출수록 소리가 작아짐
+    mciSendStringA("setaudio mapbgm volume to 300", NULL, 0, NULL);
+
+    // mapbgm을 반복 재생
+    // repeat 옵션 때문에 노래가 끝나도 다시 처음부터 재생됨
+    err = mciSendStringA("play mapbgm repeat", NULL, 0, NULL);
+
+    // BGM 재생에 실패했을 때 오류창 출력
+    if (err != 0) {
+        mciGetErrorStringA(err, errorText, sizeof(errorText));
+        MessageBoxA(NULL, errorText, "Map BGM play 실패", MB_OK);
+        return;
+    }
+}
+
+// 현재 구역에 맞게 BGM을 변경하는 함수
+void ChangeMapBGM(int zone) {
+    // 이미 같은 구역의 BGM이 재생 중이면 다시 재생하지 않음
+    if (currentMapBgmZone == zone) return;
+
+    // 현재 BGM 구역 정보 갱신
+    currentMapBgmZone = zone;
+
+    // 구역 번호에 따라 다른 BGM 재생
+    if (zone == 0) {
+        StartMapBGM("under.mp3");   // 지하 구역 BGM
+    }
+    else if (zone == 1) {
+        StartMapBGM("Park.mp3");    // 지상 구역 BGM
+    }
+    else if (zone == 2) {
+        StartMapBGM("sky.mp3");     // 하늘 구역 BGM
+    }
+}
+
 void Update() {
     // 델타 타임을 구하여 현재 차례인 플레이어에게만 시간 누적 (상대방 타이머 일시정지 효과)
     ULONGLONG now = GetTickCount64();
@@ -427,10 +504,21 @@ void Update() {
     cameraY = (int)p->y - 12;
     if (cameraY > 0) cameraY = 0;
 
+    // 플레이어의 현재 y좌표를 기준으로 현재 구역 계산
+    // GetZone 기준:
+    // 0 = 지하, 1 = 지상, 2 = 하늘
     int newZone = GetZone(p->y);
+
+    // 이전 구역과 현재 구역이 다르면 구역이 바뀐 것
     if (newZone != currentZone) {
+        // 현재 구역 정보 갱신
         currentZone = newZone;
+
+        // 화면 중앙에 "지하", "지상", "하늘" 알림을 띄우는 타이머
         areaNotiTimer = 120;
+
+        // 구역이 바뀌었으므로 해당 구역의 BGM으로 변경
+        ChangeMapBGM(newZone);
     }
 }
 
@@ -610,7 +698,16 @@ void Render() {
 }
 
 void RunGame(bool multi) {
+    // 게임 시작 시 플레이어 위치, 카메라, 타이머, 구역 정보 초기화
     InitGame(multi);
+
+    // 맵 BGM 상태 초기화
+    // 이전 게임에서 재생된 구역 정보가 남지 않도록 -1로 초기화
+    currentMapBgmZone = -1;
+
+    // 게임 시작 위치에 맞는 첫 번째 맵 BGM 재생
+    // 시작 위치는 지하이므로 under.mp3가 재생됨
+    ChangeMapBGM(GetZone(players[currentPlayer].y));
 
     while (1) {
         // 완주 상태가 아닐 때만 입력 및 물리 연산 수행
@@ -619,19 +716,28 @@ void RunGame(bool multi) {
             Update();
         }
         else {
-            // 종료 상태에서도 dt 가 튀지 않도록 시간 프레임 지속 동기화
+            // 게임 종료 상태에서도 시간 계산이 튀지 않도록 프레임 시간만 갱신
             lastFrameTime = GetTickCount64();
         }
 
+        // 화면 출력
         Render();
+
+        // 약 60FPS 유지
         Sleep(16);
 
+        // ESC를 누르면 게임 종료 후 메뉴로 복귀
         if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
             while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
             while (_kbhit()) _getch();
             break;
         }
     }
+
+    // 게임 화면에서 나갈 때 맵 BGM 정지
+    StopMapBGM();
+
+    // 화면 정리 후 타이틀 메뉴로 복귀
     clear_screen();
 }
 
