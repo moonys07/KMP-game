@@ -679,10 +679,14 @@ void Render() {
         }
     }
 
-    int count = isMulti ? 2 : 1;
-    for (int i = 0; i < count; i++) {
-        int drawY = (int)players[i].y - cameraY;
-        DrawCharacter((int)players[i].x, drawY, i);
+    // 게임이 끝났을 때는 플레이어를 더 이상 그리지 않음
+    // 그래야 승리 팝업 위/주변에 플레이어 머리나 몸이 남지 않음
+    if (!gameFinished) {
+        int count = isMulti ? 2 : 1;
+        for (int i = 0; i < count; i++) {
+            int drawY = (int)players[i].y - cameraY;
+            DrawCharacter((int)players[i].x, drawY, i);
+        }
     }
 
     // [UI 수정] 실시간 타이머 스코어보드 렌더링
@@ -718,19 +722,22 @@ void Render() {
     // [추가] 축하 Victory 팝업 연출
     if (gameFinished) {
         int cy = 13;
+
         move_cursor(35, cy);     printf("┌──────────────────────────────────────────────────┐");
-        move_cursor(35, cy + 1); printf("│               🎉 축 하 합 니 다 ! 🎉               │");
+        move_cursor(35, cy + 1); printf("│                 축 하 합 니 다 !                 │");
         move_cursor(35, cy + 2); printf("├──────────────────────────────────────────────────┤");
+
         if (isMulti) {
-            move_cursor(35, cy + 3); printf("│    👑 플레이어 %d 승리!                          │", winnerPlayer + 1);
-            move_cursor(35, cy + 4); printf("│    ⏱️ 소요 등반 시간: %6.2f초                   │", (float)playTime[winnerPlayer] / 1000.0f);
+            move_cursor(35, cy + 3); printf("│    플레이어 %d 승리!                              │", winnerPlayer + 1);
+            move_cursor(35, cy + 4); printf("│    소요 등반 시간: %6.2f초                      │", (float)playTime[winnerPlayer] / 1000.0f);
         }
         else {
-            move_cursor(35, cy + 3); printf("│    🚀 꼭대기 플랫폼 도달 완료!                  │");
-            move_cursor(35, cy + 4); printf("│    ⏱️ 최종 기록: %6.2f초                         │", (float)playTime[0] / 1000.0f);
+            move_cursor(35, cy + 3); printf("│    꼭대기 플랫폼 도달 완료!                      │");
+            move_cursor(35, cy + 4); printf("│    최종 기록: %6.2f초                           │", (float)playTime[0] / 1000.0f);
         }
+
         move_cursor(35, cy + 5); printf("│                                                  │");
-        move_cursor(35, cy + 6); printf("│        - ESC 키를 누르면 메뉴로 이동합니다.      │");
+        move_cursor(35, cy + 6); printf("│        ESC 키를 누르면 메뉴로 이동합니다.        │");
         move_cursor(35, cy + 7); printf("└──────────────────────────────────────────────────┘");
     }
 
