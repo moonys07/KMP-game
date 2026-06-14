@@ -530,6 +530,36 @@ void Update() {
     }
 }
 
+// =====================
+// 포물선 색상 함수
+// =====================
+
+// 현재 월드 Y좌표가 어떤 구역인지 확인해서 포물선 색상을 다르게 설정
+void SetTrajectoryColor(float worldY) {
+    int zone = GetZone(worldY);
+
+    if (zone == 0) {
+        set_font_color(97); // 지하: 흰색
+    }
+    else if (zone == 1) {
+        set_font_color(93); // 지상: 노란색
+    }
+    else {
+        set_font_color(91); // 하늘: 빨간색
+    }
+}
+
+// 구역에 따라 포물선 모양을 다르게 출력
+char GetTrajectoryChar(float worldY) {
+    int zone = GetZone(worldY);
+
+    if (zone == 2) {
+        return '*'; // 하늘맵에서는 별표
+    }
+
+    return '*'; // 지하, 지상도 잘 보이게 별표
+}
+
 void Render() {
     printf("\x1b[H");
 
@@ -639,9 +669,12 @@ void Render() {
             int ix = (int)simX;
             int iy = (int)simY - cameraY + 1;
             if (iy >= 0 && iy < HEIGHT && k % 3 == 0) {
-                SetZoneColor(cameraY + iy);
-                set_font_color(97);
-                move_cursor(ix + 1, iy); printf(".");
+                // 포물선의 실제 월드 Y좌표 기준으로 배경색과 글자색 설정
+                SetZoneColor((int)simY);
+                SetTrajectoryColor(simY);
+
+                move_cursor(ix + 1, iy);
+                printf("%c", GetTrajectoryChar(simY));
             }
         }
     }
