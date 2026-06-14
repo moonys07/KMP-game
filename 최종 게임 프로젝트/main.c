@@ -1167,7 +1167,7 @@ void DrawMenu(int menu) {
     move_cursor(80, 15); printf("(___.-._.-'.-.___) ");
 
     set_font_color(97);
-    move_cursor(43, 6); printf("A S C I I   J U M P   G A M E");
+    move_cursor(50, 8); printf("P L A T   F O R M   64");
 
     int startY = 13;
     char* menus[] = { "싱글 게임", "멀티 게임", "플레이 방법", "크레딧", "나가기" };
