@@ -9,7 +9,7 @@
 #pragma comment(lib, "winmm.lib")
 
 // =====================================================
-// KMP STUDIO - ASCII JUMP GAME (Refined Rendering)
+// KMP STUDIO - ASCII JUMP GAME (Timer & Balance Updated)
 // =====================================================
 
 #define WIDTH 120
@@ -63,6 +63,12 @@ int cameraY = 0;
 int currentZone = -1;
 int areaNotiTimer = 0;
 
+// [추가] 타이머 및 게임 종료 관련 변수
+ULONGLONG playTime[2] = { 0, 0 }; // 각 플레이어의 누적 활성 시간 (ms)
+ULONGLONG lastFrameTime = 0;      // 델타 타임 계산용
+bool gameFinished = false;        // 최고 존 도달 완료 플래그
+int winnerPlayer = -1;            // 승리자 인덱스
+
 int hallX = 10;
 int hallY = 24;
 int hallWalkTimer = 0;
@@ -76,75 +82,77 @@ NPC npcs[3] = {
     { 95, 24, "박정원", "게임 총괄", "크레딧 시스템 제작" }
 };
 
+// [밸런스 수정] 머리가 부딪히지 않도록 위아래 간격을 7~9칸으로 여유롭게 재설계한 64개 플랫폼
 Platform platforms[PLATFORM_COUNT] = {
-    // 지하 (Underground)
-    {0, 27, WIDTH, 4},
-    {30, 23, 15, 2},
-    {30, 19, 2, 4},
-    {80, 19, 10, 2},
-    {45, 15, 12, 2},
-    {15, 11, 10, 2},
-    {65, 7, 10, 2},
-    {95, 3, 10, 2},
-    {50, -1, 12, 2},
-    {50, -5, 2, 4},
-    {20, -5, 10, 2},
-    {85, -9, 10, 2},
-    {30, -13, 10, 2},
-    {70, -17, 12, 2},
-    {95, -21, 10, 2},
-    {45, -25, 12, 2},
-    {15, -31, 15, 2},
-    {80, -37, 15, 2},
-    {93, -40, 2, 3},
+    // 지하 영역 (Underground) - Y: 27 ~ -113
+    {0, 27, WIDTH, 4}, // 시작 바닥
+    {20, 20, 16, 2},
+    {55, 12, 16, 2},
+    {90, 4, 16, 2},
+    {50, -4, 16, 2},
+    {15, -12, 16, 2},
+    {75, -20, 16, 2},
+    {40, -28, 16, 2},
+    {10, -36, 16, 2},
+    {65, -44, 16, 2},
+    {95, -52, 16, 2},
+    {55, -60, 16, 2},
+    {20, -68, 16, 2},
+    {80, -76, 16, 2},
+    {45, -84, 16, 2},
+    {15, -92, 16, 2},
+    {70, -100, 16, 2},
+    {35, -108, 16, 2},
+    {85, -116, 16, 2},
+    {50, -124, 16, 2},
+    {15, -132, 16, 2},
 
-    // 지상 (Ground)
-    {35, -43, 10, 2},
-    {90, -47, 12, 2},
-    {25, -51, 10, 2},
-    {25, -55, 2, 4},
-    {70, -55, 12, 2},
-    {15, -59, 15, 2},
-    {55, -63, 10, 2},
-    {95, -67, 10, 2},
-    {40, -71, 10, 2},
-    {10, -75, 12, 2},
-    {85, -79, 10, 2},
-    {50, -83, 10, 2},
-    {20, -87, 12, 2},
-    {70, -91, 10, 2},
-    {95, -95, 15, 2},
-    {95, -99, 2, 4},
-    {35, -99, 10, 2},
-    {80, -103, 10, 2},
-    {25, -107, 12, 2},
-    {65, -111, 10, 2},
-    {15, -115, 10, 2},
-    {55, -119, 15, 2},
+    // 지상 영역 (Ground) - Y: -141 ~ -293
+    {75, -141, 14, 2},
+    {40, -150, 14, 2},
+    {10, -159, 14, 2},
+    {65, -168, 14, 2},
+    {95, -177, 14, 2},
+    {50, -186, 14, 2},
+    {20, -195, 14, 2},
+    {75, -204, 14, 2},
+    {40, -213, 14, 2},
+    {10, -222, 14, 2},
+    {60, -231, 14, 2},
+    {90, -240, 14, 2},
+    {45, -249, 14, 2},
+    {15, -258, 14, 2},
+    {70, -267, 14, 2},
+    {35, -276, 14, 2},
+    {85, -285, 14, 2},
+    {50, -294, 14, 2},
+    {15, -303, 14, 2},
+    {75, -312, 14, 2},
+    {40, -321, 14, 2},
 
-    // 하늘 (Sky)
-    {90, -125, 10, 2},
-    {35, -131, 12, 2},
-    {70, -137, 10, 2},
-    {20, -143, 10, 2},
-    {85, -149, 10, 2},
-    {85, -153, 2, 4},
-    {45, -155, 15, 2},
-    {95, -161, 10, 2},
-    {30, -167, 10, 2},
-    {75, -173, 10, 2},
-    {20, -179, 12, 2},
-    {60, -185, 10, 2},
-    {95, -191, 12, 2},
-    {40, -197, 10, 2},
-    {10, -203, 10, 2},
-    {50, -209, 10, 2},
-    {90, -215, 12, 2},
-    {30, -221, 10, 2},
-    {30, -225, 2, 4},
-    {75, -227, 15, 2},
-    {20, -233, 10, 2},
-    {45, -240, 20, 2}
+    // 하늘 영역 (Sky) - Y: -331 ~ -511
+    {10, -331, 12, 2},
+    {65, -341, 12, 2},
+    {95, -351, 12, 2},
+    {55, -361, 12, 2},
+    {20, -371, 12, 2},
+    {75, -381, 12, 2},
+    {40, -391, 12, 2},
+    {10, -401, 12, 2},
+    {60, -411, 12, 2},
+    {90, -421, 12, 2},
+    {45, -431, 12, 2},
+    {15, -441, 12, 2},
+    {70, -451, 12, 2},
+    {35, -461, 12, 2},
+    {85, -471, 12, 2},
+    {50, -481, 12, 2},
+    {15, -491, 12, 2},
+    {75, -501, 12, 2},
+    {40, -511, 12, 2},
+    {10, -521, 12, 2},
+    {60, -531, 12, 2},
+    {35, -542, 50, 2}  // 63번째 최종 도착 꼭대기 플랫폼 (넓고 안전함)
 };
 
 char printBuffer[65536];
@@ -161,8 +169,8 @@ void show_cursor() { printf("\x1b[?25h"); }
 void clear_screen() { printf("\x1b[2J\x1b[3J\x1b[H"); }
 
 int GetZone(float y) {
-    if (y > -40) return 0;
-    if (y > -120) return 1;
+    if (y > -135) return 0;
+    if (y > -325) return 1;
     return 2;
 }
 
@@ -173,15 +181,10 @@ void SetZoneColor(int y) {
     else set_bg_color(106);
 }
 
-// [버그 수정 포인트 1 & 2] 캐릭터 파트 렌더링 함수 전면 수정
 void DrawPart(int screenX, int screenY, float worldY, int playerIndex, const char* str) {
     if (screenY < 0 || screenY >= HEIGHT || screenX < 1 || screenX > WIDTH) return;
-
-    // 캐릭터 배경은 항상 해당 행(Row)의 순수 맵 배경색을 그대로 따라가도록 고정
-    // 기존의 플랫폼 체크 루프를 완벽히 제거하여 벽 비빔 현상 및 경계선 버그 차단
     SetZoneColor(cameraY + screenY);
 
-    // 플레이어 색상 지정
     if (isMulti) {
         if (playerIndex == 0) set_font_color(92);
         else set_font_color(93);
@@ -246,9 +249,16 @@ void InitGame(bool multi) {
     currentZone = -1;
     areaNotiTimer = 0;
 
+    // 타이머 데이터 초기화
+    playTime[0] = 0;
+    playTime[1] = 0;
+    gameFinished = false;
+    winnerPlayer = -1;
+
     players[0] = (Player){ 10, 24, 0, 0, false, false, 0 };
     players[1] = (Player){ 60, 24, 0, 0, false, false, 0 };
     clear_screen();
+    lastFrameTime = GetTickCount64();
 }
 
 void Input() {
@@ -315,6 +325,15 @@ void Input() {
 }
 
 void Update() {
+    // 델타 타임을 구하여 현재 차례인 플레이어에게만 시간 누적 (상대방 타이머 일시정지 효과)
+    ULONGLONG now = GetTickCount64();
+    ULONGLONG dt = now - lastFrameTime;
+    lastFrameTime = now;
+
+    if (!gameFinished) {
+        playTime[currentPlayer] += dt;
+    }
+
     Player* p = &players[currentPlayer];
     float prevX = p->x;
     float prevY = p->y;
@@ -344,6 +363,15 @@ void Update() {
                         p->y = (float)(pf->y - 3);
                         p->vy = 0; p->vx = 0; p->isJumping = false;
                         landed = true;
+
+                        // [추가] 최상단 플랫폼 착지 확인 시 게임 종료 처리
+                        if (i == PLATFORM_COUNT - 1) {
+                            gameFinished = true;
+                            winnerPlayer = currentPlayer;
+                            PlaySound(TEXT("land.wav"), NULL, SND_ASYNC | SND_FILENAME);
+                            break;
+                        }
+
                         if (isMulti) currentPlayer = (currentPlayer + 1) % 2;
 
                         PlaySound(TEXT("land.wav"), NULL, SND_ASYNC | SND_FILENAME);
@@ -439,7 +467,7 @@ void Render() {
         }
     }
 
-    if (isCharging) {
+    if (isCharging && !gameFinished) {
         float ratio = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
         if (ratio > 1.0f) ratio = 1.0f;
 
@@ -526,12 +554,22 @@ void Render() {
         DrawCharacter((int)players[i].x, drawY, i);
     }
 
+    // [UI 수정] 실시간 타이머 스코어보드 렌더링
     SetZoneColor(cameraY + 1);
     move_cursor(2, 2);
     set_font_color(97);
     char* zname = (currentZone == 0) ? "지하" : (currentZone == 1) ? "지상" : "하늘";
     int height_m = (27 - (int)players[currentPlayer].y) / 2;
-    printf("[%s] 현재 높이 : %dm", zname, height_m);
+
+    if (!isMulti) {
+        printf("[%s] 현재 높이 : %dm  |  ⏱️ 소요 시간 : %.2f초", zname, height_m, (float)playTime[0] / 1000.0f);
+    }
+    else {
+        printf("[%s] 높이 : %dm  |  P1 ⏱️: %.2f초 %s  |  P2 ⏱️: %.2f초 %s",
+            zname, height_m,
+            (float)playTime[0] / 1000.0f, (currentPlayer == 0 ? "◀" : "  "),
+            (float)playTime[1] / 1000.0f, (currentPlayer == 1 ? "◀" : "  "));
+    }
 
     SetZoneColor(cameraY + 2); move_cursor(2, 3); printf("ESC : 메뉴로 돌아가기");
 
@@ -546,6 +584,25 @@ void Render() {
         else if (currentZone == 2) printf("=== [ 하 늘 ] ===");
     }
 
+    // [추가] 축하 Victory 팝업 연출
+    if (gameFinished) {
+        int cy = 13;
+        move_cursor(35, cy);     printf("┌──────────────────────────────────────────────────┐");
+        move_cursor(35, cy + 1); printf("│             🎉 축 하 합 니 다 ! 🎉               │");
+        move_cursor(35, cy + 2); printf("├──────────────────────────────────────────────────┤");
+        if (isMulti) {
+            move_cursor(35, cy + 3); printf("│    👑 플레이어 %d 승리!                          │", winnerPlayer + 1);
+            move_cursor(35, cy + 4); printf("│    ⏱️ 소요 등반 시간: %6.2f초                   │", (float)playTime[winnerPlayer] / 1000.0f);
+        }
+        else {
+            move_cursor(35, cy + 3); printf("│    🚀 꼭대기 플랫폼 도달 완료!                  │");
+            move_cursor(35, cy + 4); printf("│    ⏱️ 최종 기록: %6.2f초                         │", (float)playTime[0] / 1000.0f);
+        }
+        move_cursor(35, cy + 5); printf("│                                                  │");
+        move_cursor(35, cy + 6); printf("│        - ESC 키를 누르면 메뉴로 이동합니다.      │");
+        move_cursor(35, cy + 7); printf("└──────────────────────────────────────────────────┘");
+    }
+
     printf(COLOR_RESET);
     fflush(stdout);
 }
@@ -553,8 +610,16 @@ void Render() {
 void RunGame(bool multi) {
     InitGame(multi);
     while (1) {
-        Input();
-        Update();
+        // 완주 상태가 아닐 때만 입력 및 물리 연산 수행
+        if (!gameFinished) {
+            Input();
+            Update();
+        }
+        else {
+            // 종료 상태에서도 dt 가 튀지 않도록 시간 프레임 지속 동기화
+            lastFrameTime = GetTickCount64();
+        }
+
         Render();
         Sleep(16);
 
@@ -581,18 +646,18 @@ void ShowHowToPlay() {
 
     move_cursor(40, 10); printf("[싱글 플레이]");
     move_cursor(40, 11); printf("A / D : 좌우 이동");
-    move_cursor(40, 12); printf("SPACE : 점프 차징");
+    move_cursor(40, 12); printf("SPACE : 점프 차징 (타임어택)");
 
     move_cursor(40, 14); printf("[멀티 플레이]");
     move_cursor(40, 15); printf("P1 : A / D (이동) , W (점프)");
     move_cursor(40, 16); printf("P2 : ← / → (이동) , ↑ (점프)");
 
-    move_cursor(40, 18); printf("TIP");
-    move_cursor(40, 19); printf("- 차징 게이지에 비례하여 궤적이 자라납니다.");
-    move_cursor(40, 20); printf("- 궤적 끝의 X 표시에 정확히 착지합니다.");
-    move_cursor(40, 21); printf("- 테마별로 끝까지 올라가 하늘에 도달해보세요!");
+    move_cursor(40, 18); printf("RULE & TIP");
+    move_cursor(40, 19); printf("- 멀티는 턴제이며, 착지 시 턴과 타이머가 전환됩니다.");
+    move_cursor(40, 20); printf("- 64번째 최상단 플랫폼에 먼저 도달하는 자가 승리합니다.");
+    move_cursor(40, 21); printf("- 머리 위 충돌 걱정 없이 넓어진 맵을 공략해 보세요!");
 
-    move_cursor(40, 28); printf("ESC : 메뉴로 돌아가기");
+    move_cursor(40, 25); printf("ESC : 메뉴로 돌아가기");
     fflush(stdout);
     (void)_getch();
 }
@@ -737,8 +802,11 @@ void RunCreditHall() {
     clear_screen();
 }
 
+// [수정] 켜지자마자 나오지 않도록 딜레이 시간을 추가한 로고 출력 함수
 void ShowLogo() {
     clear_screen();
+    Sleep(1000); // 1초(1000ms) 동안 빈 화면 유지 후 인트로 시작
+
     for (int i = 0; i < HEIGHT; i++) {
         move_cursor(1, i + 1); set_bg_color(40);
         for (int j = 0; j < WIDTH; j++) putchar(' ');
