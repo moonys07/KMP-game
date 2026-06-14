@@ -813,6 +813,7 @@ void ShowLogo() {
         for (int j = 0; j < WIDTH; j++) putchar(' ');
     }
     set_font_color(96);
+    Sleep(1000);
     move_cursor(45, 10); printf("  .__________________________. ");
     move_cursor(45, 11); printf(" /                            \\ ");
     move_cursor(45, 12); printf(" |    _  __  __  __   ____    |");
@@ -887,6 +888,28 @@ void DrawMenu(int menu) {
     fflush(stdout);
 }
 
+// 타이틀 화면 배경음악을 시작하는 함수
+void StartTitleBGM() {
+    // 혹시 이전에 열려 있던 titlebgm이 있으면 닫기
+    mciSendStringA("close titlebgm", NULL, 0, NULL);
+
+    // title_bgm.mp3 파일을 titlebgm이라는 이름으로 열기
+    mciSendStringA("open \"title_bgm.mp3\" alias titlebgm", NULL, 0, NULL);
+
+    // titlebgm을 반복 재생
+    // repeat 옵션 때문에 음악이 끝나도 다시 처음부터 재생됨
+    mciSendStringA("play titlebgm repeat", NULL, 0, NULL);
+}
+
+// 타이틀 화면 배경음악을 정지하는 함수
+void StopTitleBGM() {
+    // 현재 재생 중인 titlebgm 정지
+    mciSendStringA("stop titlebgm", NULL, 0, NULL);
+
+    // 열려 있던 titlebgm 파일 닫기
+    mciSendStringA("close titlebgm", NULL, 0, NULL);
+}
+
 int main() {
     system("mode con cols=120 lines=32");
     setvbuf(stdout, printBuffer, _IOFBF, sizeof(printBuffer));
@@ -894,9 +917,13 @@ int main() {
     int menu = 0;
     char input;
 
+    // 콘솔 커서 숨기기
     hide_cursor();
+    // 게임 시작 로고 출력
     ShowLogo();
-
+    // 로고가 끝난 뒤 타이틀 화면 BGM 시작
+    StartTitleBGM();
+    // 메인 메뉴 반복 실행
     while (1) {
         DrawMenu(menu);
         input = _getch();
@@ -904,12 +931,50 @@ int main() {
         if (input == 27) break;
         if (input == 'w' || input == 'W') { if (menu > 0) menu--; }
         if (input == 's' || input == 'S') { if (menu < 4) menu++; }
+        // 스페이스바를 누르면 현재 선택된 메뉴 실행
         if (input == ' ') {
-            if (menu == 0) RunGame(false);
-            else if (menu == 1) RunGame(true);
-            else if (menu == 2) ShowHowToPlay();
-            else if (menu == 3) RunCreditHall();
-            else if (menu == 4) break;
+
+            // 싱글 게임 선택
+            if (menu == 0) {
+                // 타이틀 화면을 벗어나므로 타이틀 BGM 정지
+                StopTitleBGM();
+
+                // 싱글 게임 실행
+                RunGame(false);
+
+                // 게임에서 메뉴로 돌아오면 타이틀 BGM 다시 재생
+                StartTitleBGM();
+            }
+
+            // 멀티 게임 선택
+            else if (menu == 1) {
+                // 타이틀 화면을 벗어나므로 타이틀 BGM 정지
+                StopTitleBGM();
+
+                // 멀티 게임 실행
+                RunGame(true);
+
+                // 게임에서 메뉴로 돌아오면 타이틀 BGM 다시 재생
+                StartTitleBGM();
+            }
+
+            // 플레이 방법 선택
+            else if (menu == 2) {
+                // 플레이 방법 화면 출력
+                ShowHowToPlay();
+            }
+
+            // 크레딧 선택
+            else if (menu == 3) {
+                // 크레딧 화면 실행
+                RunCreditHall();
+            }
+
+            // 나가기 선택
+            else if (menu == 4) {
+                // while문 탈출 후 게임 종료
+                break;
+            }
         }
         PlaySound(TEXT("menu.wav"), NULL, SND_ASYNC | SND_FILENAME);
     }
