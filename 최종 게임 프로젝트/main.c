@@ -183,7 +183,9 @@ void SetZoneColor(int y) {
 
 void DrawPart(int screenX, int screenY, float worldY, int playerIndex, const char* str) {
     if (screenY < 0 || screenY >= HEIGHT || screenX < 1 || screenX > WIDTH) return;
-    SetZoneColor(cameraY + screenY);
+
+    // [1번 요구사항 수정] 인덱스 정밀 보정 (-1 추가)을 통해 경계면 색상 불일치 버그 수정
+    SetZoneColor(cameraY + screenY - 1);
 
     if (isMulti) {
         if (playerIndex == 0) set_font_color(92);
@@ -588,7 +590,7 @@ void Render() {
     if (gameFinished) {
         int cy = 13;
         move_cursor(35, cy);     printf("┌──────────────────────────────────────────────────┐");
-        move_cursor(35, cy + 1); printf("│             🎉 축 하 합 니 다 ! 🎉               │");
+        move_cursor(35, cy + 1); printf("│               🎉 축 하 합 니 다 ! 🎉               │");
         move_cursor(35, cy + 2); printf("├──────────────────────────────────────────────────┤");
         if (isMulti) {
             move_cursor(35, cy + 3); printf("│    👑 플레이어 %d 승리!                          │", winnerPlayer + 1);
@@ -663,31 +665,53 @@ void ShowHowToPlay() {
     (void)_getch();
 }
 
+// [2번 및 3번 요구사항 수정] 크레딧 맵을 메인 테마(하늘+구름+잔디+흙)로 변경 및 조작법 텍스트 제거
 void RenderHall() {
     printf("\x1b[H");
 
-    for (int i = 0; i < HEIGHT; i++) {
+    // 1. 하늘 배경 그리기 (1~26행) -> 발이 26행에 오므로 26행까지가 하늘
+    for (int i = 0; i < 26; i++) {
         move_cursor(1, i + 1);
-        set_bg_color(40);
+        set_bg_color(104);
         for (int j = 0; j < WIDTH; j++) putchar(' ');
     }
 
-    move_cursor(1, 1);
-    set_font_color(93);
-    for (int i = 0; i < WIDTH; i++) printf(i % 3 == 0 ? "*" : " ");
-
-    move_cursor(1, 26);
-    set_bg_color(41);
-    for (int i = 0; i < WIDTH; i++) printf(" ");
+    // 2. 잔디 그리기 (27행)
     move_cursor(1, 27);
-    set_bg_color(40); set_font_color(90);
-    for (int i = 0; i < WIDTH; i++) putchar('-');
+    set_bg_color(102); set_font_color(32);
+    for (int j = 0; j < WIDTH; j++) {
+        if (j % 3 == 0) putchar('v'); else putchar(' ');
+    }
 
-    set_bg_color(40); set_font_color(93);
+    // 3. 흙 바닥 그리기 (28~30행)
+    for (int i = 27; i < 30; i++) {
+        move_cursor(1, i + 1);
+        set_bg_brown(); set_font_color(30);
+        for (int j = 0; j < WIDTH; j++) {
+            if ((i + j) % 4 == 0) putchar('%'); else if ((i + j) % 7 == 0) putchar('.'); else putchar(' ');
+        }
+    }
+
+    // 4. 구름 디자인 배치 (메인 화면 양식 적용)
+    set_bg_color(104); set_font_color(97);
+    move_cursor(23, 7); printf("     _ .--.      ");
+    move_cursor(21, 8); printf("   (          )-.   ");
+    move_cursor(20, 9); printf(" .'             '. ");
+    move_cursor(20, 10); printf("(___.-._.-'.-.___) ");
+
+    move_cursor(83, 12); printf("     _ .--.      ");
+    move_cursor(81, 13); printf("   (          )-.   ");
+    move_cursor(80, 14); printf(" .'             '. ");
+    move_cursor(80, 15); printf("(___.-._.-'.-.___) ");
+
+    // 크레딧 메인 타이틀 출력
+    set_bg_color(104); set_font_color(93);
     move_cursor(55, 4); printf("C R E D I T");
     move_cursor(47, 6); set_font_color(97); printf("- 게임 제작에 참여한 사람들 -");
 
+    // NPC 렌더링 (하늘 배경 위에서 깨지지 않게 보정)
     for (int i = 0; i < 3; i++) {
+        set_bg_color(104);
         if (i == 0) set_font_color(92);
         else if (i == 1) set_font_color(93);
         else set_font_color(95);
@@ -705,11 +729,13 @@ void RenderHall() {
         move_cursor(npcs[i].x - 1, npcs[i].y + 4); set_font_color(97); printf("%s", npcs[i].name);
     }
 
+    // NPC 대화 말풍선 출력 (배경 투명화 보정)
     if (activeBubbleNpc != -1) {
         NPC* n = &npcs[activeBubbleNpc];
         int bx = n->x - 10;
         int by = n->y - 6;
 
+        set_bg_color(104);
         set_font_color(97);
         move_cursor(bx, by);     printf(" ------------------------- ");
         move_cursor(bx, by + 1); printf("  [ "); set_font_color(96); printf("%s", n->name); set_font_color(97); printf(" ]");
@@ -718,8 +744,10 @@ void RenderHall() {
         move_cursor(bx, by + 4); printf(" ----------\\ /------------ ");
     }
 
+    // 플레이어 렌더링 (하늘 배경 위에서 깨지지 않게 보정)
     int px = hallX;
     int py = hallY;
+    set_bg_color(104);
     set_font_color(97);
     move_cursor(px + 1, py); printf("O");
     move_cursor(px, py + 1); printf("(|)");
@@ -735,12 +763,10 @@ void RenderHall() {
         move_cursor(px, py + 2); printf("/"); move_cursor(px + 2, py + 2); printf("\\");
     }
 
-    set_font_color(97);
-    move_cursor(2, 2);
-    printf("A, D: 이동   E: 대화(ON/OFF)   ESC: 종료");
-
+    // [3번 요구사항 수정] 상단 조작 설명 삭제 및 조건부 대화 유도 알림만 깔끔하게 유지
     if (currentNpc != -1 && activeBubbleNpc == -1) {
-        move_cursor(2, 4);
+        move_cursor(2, 2);
+        set_bg_color(104);
         set_font_color(96);
         printf("가까이 왔습니다! E키를 눌러보세요.");
     }
@@ -853,12 +879,12 @@ void DrawMenu(int menu) {
 
     set_bg_color(104); set_font_color(97);
     move_cursor(23, 7); printf("     _ .--.      ");
-    move_cursor(21, 8); printf("   (         )-.   ");
+    move_cursor(21, 8); printf("   (          )-.   ");
     move_cursor(20, 9); printf(" .'             '. ");
     move_cursor(20, 10); printf("(___.-._.-'.-.___) ");
 
     move_cursor(83, 12); printf("     _ .--.      ");
-    move_cursor(81, 13); printf("   (         )-.   ");
+    move_cursor(81, 13); printf("   (          )-.   ");
     move_cursor(80, 14); printf(" .'             '. ");
     move_cursor(80, 15); printf("(___.-._.-'.-.___) ");
 
