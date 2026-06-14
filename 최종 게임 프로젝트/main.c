@@ -152,14 +152,22 @@ Platform platforms[PLATFORM_COUNT] = {
     {15, -441, 12, 2},
     {70, -451, 12, 2},
     {35, -461, 12, 2},
+    // 하늘 영역 후반부 - 최종 플랫폼에 올라가기 쉽게 재배치
     {85, -471, 12, 2},
-    {50, -481, 12, 2},
-    {15, -491, 12, 2},
-    {75, -501, 12, 2},
-    {40, -511, 12, 2},
-    {10, -521, 12, 2},
-    {60, -531, 12, 2},
-    {35, -542, 50, 2}  // 63번째 최종 도착 꼭대기 플랫폼 (넓고 안전함)
+    {55, -481, 12, 2},
+    {25, -491, 12, 2},
+    {60, -501, 14, 2},
+    {88, -511, 14, 2},
+    {70, -521, 14, 2},
+
+    // 최종 플랫폼 바로 아래 발판
+    // 최종 플랫폼 바로 밑이 아니라 오른쪽 옆에 배치해서
+    // 점프할 때 머리가 최종 플랫폼 밑면에 부딪히지 않게 함
+    {88, -531, 14, 2},
+
+    // 최종 도착 플랫폼
+    // 코드에서 i == PLATFORM_COUNT - 1일 때 승리 처리하기 때문
+    {35, -540, 50, 2}
 };
 
 char printBuffer[65536];
@@ -697,6 +705,51 @@ void Render() {
     fflush(stdout);
 }
 
+// =====================
+// 테스트용 공중부양 치트
+// =====================
+
+// C키를 누르고 있는 동안 현재 플레이어를 위로 계속 밀어 올리는 함수
+void CheckFlyCheat() {
+    Player* p = &players[currentPlayer];
+
+    // C키를 누르고 있으면 공중부양 활성화
+    if (GetAsyncKeyState('C') & 0x8000) {
+
+        // 차징 중이었다면 차징 해제
+        isCharging = false;
+
+        // 공중 상태로 변경
+        p->isJumping = true;
+
+        // 위쪽으로 계속 힘을 줌
+        // 값이 작을수록 천천히 상승, 클수록 빠르게 상승
+        p->vy = -2.0f;
+
+        // 공중부양 중 좌우 이동도 가능하게 처리
+        if (GetAsyncKeyState('A') & 0x8000) {
+            p->vx = -1.5f;
+            moveDir[currentPlayer] = -1;
+        }
+        else if (GetAsyncKeyState('D') & 0x8000) {
+            p->vx = 1.5f;
+            moveDir[currentPlayer] = 1;
+        }
+        else if (GetAsyncKeyState(VK_LEFT) & 0x8000) {
+            p->vx = -1.5f;
+            moveDir[currentPlayer] = -1;
+        }
+        else if (GetAsyncKeyState(VK_RIGHT) & 0x8000) {
+            p->vx = 1.5f;
+            moveDir[currentPlayer] = 1;
+        }
+        else {
+            // 아무 방향키도 안 누르면 좌우 이동 멈춤
+            p->vx = 0.0f;
+        }
+    }
+}
+
 void RunGame(bool multi) {
     // 게임 시작 시 플레이어 위치, 카메라, 타이머, 구역 정보 초기화
     InitGame(multi);
@@ -712,7 +765,14 @@ void RunGame(bool multi) {
     while (1) {
         // 완주 상태가 아닐 때만 입력 및 물리 연산 수행
         if (!gameFinished) {
+            // 일반 입력 처리
             Input();
+
+            // 테스트용 치트 입력 처리
+            // C키를 누르고 있으면 공중부양
+            CheckFlyCheat();
+
+            // 물리, 충돌, 카메라, 구역 변경 처리
             Update();
         }
         else {
