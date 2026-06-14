@@ -12,18 +12,22 @@
 // KMP STUDIO - ASCII JUMP GAME (Timer & Balance Updated)
 // =====================================================
 
+// 콘솔 화면 크기
 #define WIDTH 120
 #define HEIGHT 30
 
+// 점프 차징, 발판 개수 관련 값
 #define MAX_GAUGE 1000.0f
 #define PLATFORM_COUNT 64
 
+// 점프 물리값. 너무 크게 바꾸면 난이도가 확 달라짐
 #define GRAVITY 0.20f
 #define MAX_JUMP_VX 2.8f 
 #define MAX_JUMP_VY 3.8f 
 
 #define COLOR_RESET "\x1b[0m"
 
+// 플레이어 위치, 속도, 움직임 상태를 저장하는 구조체
 typedef struct {
     float x;
     float y;
@@ -34,6 +38,7 @@ typedef struct {
     int walkTimer;
 } Player;
 
+// 발판의 위치와 크기를 저장하는 구조체
 typedef struct {
     int x;
     int y;
@@ -41,6 +46,7 @@ typedef struct {
     int height;
 } Platform;
 
+// 크레딧 화면에 나오는 NPC 정보
 typedef struct {
     int x;
     int y;
@@ -63,22 +69,19 @@ int cameraY = 0;
 int currentZone = -1;
 int areaNotiTimer = 0;
 
-// 현재 재생 중인 맵 BGM 구역을 저장하는 변수
-// -1 = 아직 맵 BGM이 재생되지 않은 상태
-//  0 = 지하 BGM
-//  1 = 지상 BGM
-//  2 = 하늘 BGM
+// 지금 어떤 구역 BGM이 나오는지 저장
+// -1은 아직 아무 BGM도 안 튼 상태
 int currentMapBgmZone = -1;
 
-// scanf로 설정하는 치트 모드 변수
+// 발표 때 scanf 설명하려고 넣은 테스트 모드 값
 bool cheatModeEnabled = false; // 치트 모드 ON/OFF
 float cheatFlyPower = 2.0f;    // 공중부양 상승 속도
 
-// [추가] 타이머 및 게임 종료 관련 변수
-ULONGLONG playTime[2] = { 0, 0 }; // 각 플레이어의 누적 활성 시간 (ms)
-ULONGLONG lastFrameTime = 0;      // 델타 타임 계산용
-bool gameFinished = false;        // 최고 존 도달 완료 플래그
-int winnerPlayer = -1;            // 승리자 인덱스
+// 타이머랑 게임 클리어 상태
+ULONGLONG playTime[2] = { 0, 0 }; // 각 플레이어의 누적 플레이 시간
+ULONGLONG lastFrameTime = 0;      // 이전 프레임 시간 저장
+bool gameFinished = false;        // 클리어 여부
+int winnerPlayer = -1;            // 멀티에서 이긴 플레이어
 
 int hallX = 10;
 int hallY = 24;
@@ -93,7 +96,7 @@ NPC npcs[3] = {
     { 95, 24, "박정원", "게임 총괄", "크레딧 시스템 제작" }
 };
 
-// [밸런스 수정] 머리가 부딪히지 않도록 위아래 간격을 7~9칸으로 여유롭게 재설계한 64개 플랫폼
+// 실제 게임에서 밟는 발판들. y값이 작아질수록 위쪽으로 올라감
 Platform platforms[PLATFORM_COUNT] = {
     // 지하 영역 (Underground) - Y: 27 ~ -113
     {0, 27, WIDTH, 4}, // 시작 바닥
@@ -164,13 +167,10 @@ Platform platforms[PLATFORM_COUNT] = {
     {88, -511, 14, 2},
     {70, -521, 14, 2},
 
-    // 최종 플랫폼 바로 아래 발판
-    // 최종 플랫폼 바로 밑이 아니라 오른쪽 옆에 배치해서
-    // 점프할 때 머리가 최종 플랫폼 밑면에 부딪히지 않게 함
+    // 마지막으로 올라가기 전 발판
     {88, -531, 14, 2},
 
-    // 최종 도착 플랫폼
-    // 코드에서 i == PLATFORM_COUNT - 1일 때 승리 처리하기 때문
+    // 마지막 발판. 여기에 닿으면 클리어 처리
     {35, -540, 50, 2}
 };
 
@@ -187,12 +187,14 @@ void hide_cursor() { printf("\x1b[?25l"); }
 void show_cursor() { printf("\x1b[?25h"); }
 void clear_screen() { printf("\x1b[2J\x1b[3J\x1b[H"); }
 
+// y좌표로 현재 구역을 구함
 int GetZone(float y) {
     if (y > -135) return 0;
     if (y > -325) return 1;
     return 2;
 }
 
+// 구역에 따라 배경색을 바꿔줌
 void SetZoneColor(int y) {
     int zone = GetZone((float)y);
     if (zone == 0) set_bg_color(40);
@@ -203,7 +205,7 @@ void SetZoneColor(int y) {
 void DrawPart(int screenX, int screenY, float worldY, int playerIndex, const char* str) {
     if (screenY < 0 || screenY >= HEIGHT || screenX < 1 || screenX > WIDTH) return;
 
-    // [1번 요구사항 수정] 인덱스 정밀 보정 (-1 추가)을 통해 경계면 색상 불일치 버그 수정
+    // 화면 위치에 맞는 배경색을 다시 맞춰줌
     SetZoneColor(cameraY + screenY - 1);
 
     if (isMulti) {
@@ -218,6 +220,7 @@ void DrawPart(int screenX, int screenY, float worldY, int playerIndex, const cha
     printf("%s", str);
 }
 
+// 플레이어 상태에 따라 모양을 다르게 그림
 void DrawCharacter(int x, int y, int index) {
     Player* p = &players[index];
     float wy = p->y;
@@ -250,6 +253,7 @@ void DrawCharacter(int x, int y, int index) {
     printf(COLOR_RESET);
 }
 
+// 플레이어가 발판이랑 겹치는지 확인
 bool CheckCollision(float px, float py) {
     for (int i = 0; i < PLATFORM_COUNT; i++) {
         Platform* pf = &platforms[i];
@@ -262,6 +266,7 @@ bool CheckCollision(float px, float py) {
     return false;
 }
 
+// 게임을 처음 시작할 때 값들을 초기화
 void InitGame(bool multi) {
     isMulti = multi;
     currentPlayer = 0;
@@ -270,7 +275,7 @@ void InitGame(bool multi) {
     currentZone = -1;
     areaNotiTimer = 0;
 
-    // 타이머 데이터 초기화
+    // 새 게임이니까 시간 기록도 다시 0으로 맞춤
     playTime[0] = 0;
     playTime[1] = 0;
     gameFinished = false;
@@ -282,6 +287,7 @@ void InitGame(bool multi) {
     lastFrameTime = GetTickCount64();
 }
 
+// 키 입력을 받아서 이동, 차징, 점프를 처리
 void Input() {
     Player* p = &players[currentPlayer];
     int leftKey = (!isMulti || currentPlayer == 0) ? 'A' : VK_LEFT;
@@ -349,30 +355,26 @@ void Input() {
 // 맵별 배경음악 함수
 // =====================
 
-// 현재 재생 중인 맵 BGM을 정지하고 닫는 함수
+// 맵 BGM을 끄고 닫음
 void StopMapBGM() {
-    // mapbgm이라는 별칭으로 재생 중인 음악 정지
     mciSendStringA("stop mapbgm", NULL, 0, NULL);
-
-    // 열려 있는 mapbgm 파일 닫기
     mciSendStringA("close mapbgm", NULL, 0, NULL);
 }
 
-// 특정 파일을 맵 BGM으로 반복 재생하는 함수
+// 파일 이름을 받아서 맵 BGM으로 재생
 void StartMapBGM(const char* filename) {
     char command[256];
     MCIERROR err;
     char errorText[256];
 
-    // 기존 맵 BGM이 재생 중이면 먼저 정지
+    // 다른 구역 음악이 나오고 있을 수 있어서 먼저 정지
     StopMapBGM();
 
-    // mp3 파일을 mapbgm이라는 별칭으로 열기
-    // mp3는 type mpegvideo를 사용하는 것이 안정적임
+    // mp3 파일을 mapbgm이라는 이름으로 열어둠
     sprintf(command, "open \"%s\" type mpegvideo alias mapbgm", filename);
     err = mciSendStringA(command, NULL, 0, NULL);
 
-    // BGM 파일 열기에 실패했을 때 오류창 출력
+    // 파일 이름이 틀리거나 파일이 없으면 여기로 들어옴
     if (err != 0) {
         mciGetErrorStringA(err, errorText, sizeof(errorText));
         MessageBoxA(NULL, errorText, "Map BGM open 실패", MB_OK);
@@ -380,11 +382,9 @@ void StartMapBGM(const char* filename) {
     }
 
     // 맵 BGM 볼륨 설정
-    // 숫자를 낮출수록 소리가 작아짐
-    mciSendStringA("setaudio mapbgm volume to 300", NULL, 0, NULL);
+    mciSendStringA("setaudio mapbgm volume to 450", NULL, 0, NULL);
 
-    // mapbgm을 반복 재생
-    // repeat 옵션 때문에 노래가 끝나도 다시 처음부터 재생됨
+    // 음악 반복 재생
     err = mciSendStringA("play mapbgm repeat", NULL, 0, NULL);
 
     // BGM 재생에 실패했을 때 오류창 출력
@@ -395,15 +395,15 @@ void StartMapBGM(const char* filename) {
     }
 }
 
-// 현재 구역에 맞게 BGM을 변경하는 함수
+// 구역이 바뀌면 그 구역에 맞는 음악으로 바꿈
 void ChangeMapBGM(int zone) {
-    // 이미 같은 구역의 BGM이 재생 중이면 다시 재생하지 않음
+    // 같은 구역이면 굳이 다시 틀 필요 없음
     if (currentMapBgmZone == zone) return;
 
     // 현재 BGM 구역 정보 갱신
     currentMapBgmZone = zone;
 
-    // 구역 번호에 따라 다른 BGM 재생
+    // 구역 번호마다 다른 음악 사용
     if (zone == 0) {
         StartMapBGM("under.mp3");   // 지하 구역 BGM
     }
@@ -415,8 +415,9 @@ void ChangeMapBGM(int zone) {
     }
 }
 
+// 매 프레임마다 위치, 충돌, 타이머 같은 게임 상태를 바꿈
 void Update() {
-    // 델타 타임을 구하여 현재 차례인 플레이어에게만 시간 누적 (상대방 타이머 일시정지 효과)
+    // 프레임 사이 시간을 구해서 현재 플레이어 시간에만 더함
     ULONGLONG now = GetTickCount64();
     ULONGLONG dt = now - lastFrameTime;
     lastFrameTime = now;
@@ -455,11 +456,14 @@ void Update() {
                         p->vy = 0; p->vx = 0; p->isJumping = false;
                         landed = true;
 
-                        // [추가] 최상단 플랫폼 착지 확인 시 게임 종료 처리
+                        // 마지막 발판이면 게임 클리어
                         if (i == PLATFORM_COUNT - 1) {
                             gameFinished = true;
                             winnerPlayer = currentPlayer;
-                            PlaySound(TEXT("land.wav"), NULL, SND_ASYNC | SND_FILENAME);
+                            // 클리어했으므로 맵 BGM 정지
+                            StopMapBGM();
+                            // 클리어 효과음 재생
+                            PlaySound(TEXT("gameclear.wav"), NULL, SND_ASYNC | SND_FILENAME);
                             break;
                         }
 
@@ -516,20 +520,18 @@ void Update() {
     cameraY = (int)p->y - 12;
     if (cameraY > 0) cameraY = 0;
 
-    // 플레이어의 현재 y좌표를 기준으로 현재 구역 계산
-    // GetZone 기준:
-    // 0 = 지하, 1 = 지상, 2 = 하늘
+    // 플레이어 높이에 따라 현재 구역 확인
     int newZone = GetZone(p->y);
 
-    // 이전 구역과 현재 구역이 다르면 구역이 바뀐 것
+    // 구역이 바뀌었으면 알림이랑 BGM도 바꿈
     if (newZone != currentZone) {
         // 현재 구역 정보 갱신
         currentZone = newZone;
 
-        // 화면 중앙에 "지하", "지상", "하늘" 알림을 띄우는 타이머
+        // 구역 이름을 잠깐 보여주기 위한 시간
         areaNotiTimer = 120;
 
-        // 구역이 바뀌었으므로 해당 구역의 BGM으로 변경
+        // 구역 음악 변경
         ChangeMapBGM(newZone);
     }
 }
@@ -538,7 +540,7 @@ void Update() {
 // 포물선 색상 함수
 // =====================
 
-// 현재 월드 Y좌표가 어떤 구역인지 확인해서 포물선 색상을 다르게 설정
+// 포물선이 배경에 묻히지 않게 구역마다 색을 다르게 줌
 void SetTrajectoryColor(float worldY) {
     int zone = GetZone(worldY);
 
@@ -553,17 +555,7 @@ void SetTrajectoryColor(float worldY) {
     }
 }
 
-// 구역에 따라 포물선 모양을 다르게 출력
-char GetTrajectoryChar(float worldY) {
-    int zone = GetZone(worldY);
-
-    if (zone == 2) {
-        return '*'; // 하늘맵에서는 별표
-    }
-
-    return '*'; // 지하, 지상도 잘 보이게 별표
-}
-
+// 화면 전체를 다시 그리는 함수
 void Render() {
     printf("\x1b[H");
 
@@ -599,6 +591,7 @@ void Render() {
         }
     }
 
+    // 점프 차징 중일 때 예상 궤적을 보여줌
     if (isCharging && !gameFinished) {
         float ratio = (float)(GetTickCount64() - chargeStart) / MAX_GAUGE;
         if (ratio > 1.0f) ratio = 1.0f;
@@ -673,12 +666,12 @@ void Render() {
             int ix = (int)simX;
             int iy = (int)simY - cameraY + 1;
             if (iy >= 0 && iy < HEIGHT && k % 3 == 0) {
-                // 포물선의 실제 월드 Y좌표 기준으로 배경색과 글자색 설정
+                // 궤적 위치의 배경색과 글자색 맞추기
                 SetZoneColor((int)simY);
                 SetTrajectoryColor(simY);
 
                 move_cursor(ix + 1, iy);
-                printf("%c", GetTrajectoryChar(simY));
+                printf("*");
             }
         }
     }
@@ -693,7 +686,7 @@ void Render() {
         }
     }
 
-    // [UI 수정] 실시간 타이머 스코어보드 렌더링
+    // 화면 왼쪽 위에 높이랑 시간을 표시
     SetZoneColor(cameraY + 1);
     move_cursor(2, 2);
     set_font_color(97);
@@ -701,10 +694,10 @@ void Render() {
     int height_m = (27 - (int)players[currentPlayer].y) / 2;
 
     if (!isMulti) {
-        printf("[%s] 현재 높이 : %dm  |  ⏱️ 소요 시간 : %.2f초", zname, height_m, (float)playTime[0] / 1000.0f);
+        printf("[%s] 현재 높이 : %dm  |  소요 시간 : %.2f초", zname, height_m, (float)playTime[0] / 1000.0f);
     }
     else {
-        printf("[%s] 높이 : %dm  |  P1 ⏱️: %.2f초 %s  |  P2 ⏱️: %.2f초 %s",
+        printf("[%s] 높이 : %dm  |  P1 : %.2f초 %s  |  P2 : %.2f초 %s",
             zname, height_m,
             (float)playTime[0] / 1000.0f, (currentPlayer == 0 ? "◀" : "  "),
             (float)playTime[1] / 1000.0f, (currentPlayer == 1 ? "◀" : "  "));
@@ -723,7 +716,7 @@ void Render() {
         else if (currentZone == 2) printf("=== [ 하 늘 ] ===");
     }
 
-    // [추가] 축하 Victory 팝업 연출
+    // 클리어하면 중앙에 결과창 표시
     if (gameFinished) {
         int cy = 13;
 
@@ -750,11 +743,11 @@ void Render() {
 }
 
 // =====================
-// scanf 치트 설정 함수
+// scanf 테스트 모드 설정
 // =====================
 
-// 게임 시작 전에 scanf로 치트 모드 사용 여부를 입력받고,
-// 치트 모드를 켰을 때만 상승 속도를 추가로 입력받는 함수
+// 발표에서 scanf 사용을 보여주기 위해 만든 부분
+// 치트를 켰을 때만 상승 속도를 한 번 더 입력받음
 void SetupCheatModeByScanf() {
     int cheatInput = 0;
     float powerInput = 2.0f;
@@ -769,13 +762,13 @@ void SetupCheatModeByScanf() {
     printf("0 = 사용 안 함, 1 = 사용\n\n");
     printf("입력: ");
 
-    // setvbuf 때문에 printf가 바로 안 보일 수 있어서 강제로 출력
+    // printf 내용이 바로 보이도록 해줌
     fflush(stdout);
 
-    // scanf로 치트 모드 사용 여부 입력
+    // 먼저 치트 모드를 쓸지 입력받음
     scanResult = scanf("%d", &cheatInput);
 
-    // 입력 버퍼에 남은 Enter 제거
+    // 엔터가 버퍼에 남아서 다음 입력에 영향 주는 걸 막음
     while (getchar() != '\n');
 
     // 입력이 잘못됐으면 치트 비활성화
@@ -786,7 +779,7 @@ void SetupCheatModeByScanf() {
         return;
     }
 
-    // 조건문으로 치트 모드 사용 여부 확인
+    // 1을 입력했을 때만 치트 모드 켜기
     if (cheatInput == 1) {
         cheatModeEnabled = true;
 
@@ -796,13 +789,13 @@ void SetupCheatModeByScanf() {
 
         fflush(stdout);
 
-        // 치트 모드가 켜졌을 때만 상승 속도 입력
+        // 치트를 켰을 때만 속도값을 추가 입력
         scanResult = scanf("%f", &powerInput);
 
-        // 입력 버퍼에 남은 Enter 제거
+        // 엔터가 버퍼에 남아서 다음 입력에 영향 주는 걸 막음
         while (getchar() != '\n');
 
-        // 상승 속도가 잘못 입력되면 기본값 사용
+        // 이상한 값을 넣으면 기본값으로 처리
         if (scanResult != 1 || powerInput <= 0.0f) {
             cheatFlyPower = 2.0f;
         }
@@ -818,9 +811,9 @@ void SetupCheatModeByScanf() {
     clear_screen();
 }
 
-// C키를 누르고 있는 동안 현재 플레이어를 위로 계속 밀어 올리는 함수
+// C키를 누르는 동안 위로 올라가는 테스트 기능
 void CheckFlyCheat() {
-    // scanf에서 치트 모드를 끈 상태라면 함수 종료
+    // 치트 모드를 안 켰으면 아무것도 안 함
     if (!cheatModeEnabled) return;
 
     Player* p = &players[currentPlayer];
@@ -834,11 +827,10 @@ void CheckFlyCheat() {
         // 공중 상태로 변경
         p->isJumping = true;
 
-        // scanf로 입력받은 상승 속도만큼 위쪽으로 힘을 줌
-        // cheatFlyPower 값이 작을수록 천천히 상승하고, 클수록 빠르게 상승함
+        // scanf로 입력한 값만큼 위로 올라감
         p->vy = -cheatFlyPower;
 
-        // 공중부양 중 좌우 이동도 가능하게 처리
+        // 올라가는 중에도 좌우 이동은 가능하게 함
         if (GetAsyncKeyState('A') & 0x8000) {
             p->vx = -1.5f;
             moveDir[currentPlayer] = -1;
@@ -862,46 +854,47 @@ void CheckFlyCheat() {
     }
 }
 
+// 실제 게임 화면을 실행하는 메인 루프
 void RunGame(bool multi) {
-    // 게임 시작 시 플레이어 위치, 카메라, 타이머, 구역 정보 초기화
+    // 플레이어 위치, 카메라, 타이머를 초기화
     InitGame(multi);
 
-    // 게임 시작 전에 scanf로 치트 모드 설정
+    // 게임 시작 전에 테스트 모드 설정
     SetupCheatModeByScanf();
 
-    // 맵 BGM 상태 초기화
-    // 이전 게임에서 재생된 구역 정보가 남지 않도록 -1로 초기화
+    // scanf 입력 시간은 플레이 시간에 포함하지 않도록 타이머 기준점 재설정
+    lastFrameTime = GetTickCount64();
+
+    // 이전 게임에서 남은 BGM 구역 값을 초기화
     currentMapBgmZone = -1;
 
-    // 게임 시작 위치에 맞는 첫 번째 맵 BGM 재생
-    // 시작 위치는 지하이므로 under.mp3가 재생됨
+    // 시작 위치에 맞는 첫 BGM 재생
     ChangeMapBGM(GetZone(players[currentPlayer].y));
 
     while (1) {
-        // 완주 상태가 아닐 때만 입력 및 물리 연산 수행
+        // 클리어 전에는 입력과 물리 계산을 계속 함
         if (!gameFinished) {
-            // 일반 입력 처리
+            // 이동, 점프 입력 처리
             Input();
 
-            // 테스트용 치트 입력 처리
-            // C키를 누르고 있으면 공중부양
+            // C키 테스트 기능 처리
             CheckFlyCheat();
 
-            // 물리, 충돌, 카메라, 구역 변경 처리
+            // 위치, 충돌, 카메라 처리
             Update();
         }
         else {
-            // 게임 종료 상태에서도 시간 계산이 튀지 않도록 프레임 시간만 갱신
+            // 클리어 후에는 시간만 더 안 늘어나게 처리
             lastFrameTime = GetTickCount64();
         }
 
-        // 화면 출력
+        // 화면 다시 그리기
         Render();
 
-        // 약 60FPS 유지
+        // 너무 빠르게 반복되지 않게 잠깐 쉬기
         Sleep(16);
 
-        // ESC를 누르면 게임 종료 후 메뉴로 복귀
+        // ESC를 누르면 메뉴로 돌아감
         if (GetAsyncKeyState(VK_ESCAPE) & 0x8000) {
             while (GetAsyncKeyState(VK_ESCAPE) & 0x8000) Sleep(10);
             while (_kbhit()) _getch();
@@ -909,13 +902,14 @@ void RunGame(bool multi) {
         }
     }
 
-    // 게임 화면에서 나갈 때 맵 BGM 정지
+    // 게임을 나갈 때 맵 음악 끄기
     StopMapBGM();
 
-    // 화면 정리 후 타이틀 메뉴로 복귀
+    // 메뉴로 돌아가기 전에 화면 정리
     clear_screen();
 }
 
+// 플레이 방법 화면
 void ShowHowToPlay() {
     printf("\x1b[H");
     for (int i = 0; i < HEIGHT; i++) {
@@ -946,7 +940,7 @@ void ShowHowToPlay() {
     (void)_getch();
 }
 
-// [2번 및 3번 요구사항 수정] 크레딧 맵을 메인 테마(하늘+구름+잔디+흙)로 변경 및 조작법 텍스트 제거
+// 크레딧 화면을 그리는 함수
 void RenderHall() {
     printf("\x1b[H");
 
@@ -973,7 +967,7 @@ void RenderHall() {
         }
     }
 
-    // 4. 구름 디자인 배치 (메인 화면 양식 적용)
+    // 구름 모양 출력
     set_bg_color(104); set_font_color(97);
     move_cursor(23, 7); printf("     _ .--.      ");
     move_cursor(21, 8); printf("   (          )-.   ");
@@ -1044,7 +1038,7 @@ void RenderHall() {
         move_cursor(px, py + 2); printf("/"); move_cursor(px + 2, py + 2); printf("\\");
     }
 
-    // [3번 요구사항 수정] 상단 조작 설명 삭제 및 조건부 대화 유도 알림만 깔끔하게 유지
+    // NPC 근처에 가면 E키 안내만 보여줌
     if (currentNpc != -1 && activeBubbleNpc == -1) {
         move_cursor(2, 2);
         set_bg_color(104);
@@ -1056,6 +1050,7 @@ void RenderHall() {
     fflush(stdout);
 }
 
+// 플레이어가 가까이 간 NPC가 있는지 확인
 int GetNearNpc() {
     for (int i = 0; i < 3; i++) {
         if (abs(hallX - npcs[i].x) < 5) return i;
@@ -1063,6 +1058,7 @@ int GetNearNpc() {
     return -1;
 }
 
+// 크레딧 화면에서 플레이어를 움직이는 루프
 void RunCreditHall() {
     hallX = 10;
     hallY = 24;
@@ -1110,7 +1106,7 @@ void RunCreditHall() {
     clear_screen();
 }
 
-// [수정] 켜지자마자 나오지 않도록 딜레이 시간을 추가한 로고 출력 함수
+// 게임 시작할 때 나오는 로고 화면
 void ShowLogo() {
     clear_screen();
     Sleep(1000); // 1초(1000ms) 동안 빈 화면 유지 후 인트로 시작
@@ -1137,6 +1133,7 @@ void ShowLogo() {
     clear_screen();
 }
 
+// 메인 메뉴 화면을 그림
 void DrawMenu(int menu) {
     printf("\x1b[H");
 
@@ -1195,28 +1192,25 @@ void DrawMenu(int menu) {
     fflush(stdout);
 }
 
-// 타이틀 화면 배경음악을 시작하는 함수
+// 타이틀 화면 음악 시작
 void StartTitleBGM() {
-    // 혹시 이전에 열려 있던 titlebgm이 있으면 닫기
+    // 이전에 열려 있던 음악이 있으면 닫기
     mciSendStringA("close titlebgm", NULL, 0, NULL);
 
-    // title_bgm.mp3 파일을 titlebgm이라는 이름으로 열기
+    // title_bgm.mp3 파일 열기
     mciSendStringA("open \"title_bgm.mp3\" alias titlebgm", NULL, 0, NULL);
 
-    // titlebgm을 반복 재생
-    // repeat 옵션 때문에 음악이 끝나도 다시 처음부터 재생됨
+    // 반복 재생
     mciSendStringA("play titlebgm repeat", NULL, 0, NULL);
 }
 
-// 타이틀 화면 배경음악을 정지하는 함수
+// 타이틀 화면 음악 정지
 void StopTitleBGM() {
-    // 현재 재생 중인 titlebgm 정지
     mciSendStringA("stop titlebgm", NULL, 0, NULL);
-
-    // 열려 있던 titlebgm 파일 닫기
     mciSendStringA("close titlebgm", NULL, 0, NULL);
 }
 
+// 프로그램 시작 지점
 int main() {
     system("mode con cols=120 lines=32");
     setvbuf(stdout, printBuffer, _IOFBF, sizeof(printBuffer));
@@ -1224,13 +1218,11 @@ int main() {
     int menu = 0;
     char input;
 
-    // 콘솔 커서 숨기기
+    // 기본 화면 세팅 후 로고와 메뉴 시작
     hide_cursor();
-    // 게임 시작 로고 출력
     ShowLogo();
-    // 로고가 끝난 뒤 타이틀 화면 BGM 시작
     StartTitleBGM();
-    // 메인 메뉴 반복 실행
+    // 메뉴는 나가기 전까지 계속 반복
     while (1) {
         DrawMenu(menu);
         input = _getch();
@@ -1238,48 +1230,48 @@ int main() {
         if (input == 27) break;
         if (input == 'w' || input == 'W') { if (menu > 0) menu--; }
         if (input == 's' || input == 'S') { if (menu < 4) menu++; }
-        // 스페이스바를 누르면 현재 선택된 메뉴 실행
+        // 스페이스바로 선택한 메뉴 실행
         if (input == ' ') {
 
-            // 싱글 게임 선택
+            // 싱글 게임
             if (menu == 0) {
-                // 타이틀 화면을 벗어나므로 타이틀 BGM 정지
+                // 게임 화면으로 들어가기 전에 메뉴 음악 정지
                 StopTitleBGM();
 
-                // 싱글 게임 실행
+                // 싱글 실행
                 RunGame(false);
 
-                // 게임에서 메뉴로 돌아오면 타이틀 BGM 다시 재생
+                // 다시 메뉴로 돌아오면 음악 재생
                 StartTitleBGM();
             }
 
-            // 멀티 게임 선택
+            // 멀티 게임
             else if (menu == 1) {
-                // 타이틀 화면을 벗어나므로 타이틀 BGM 정지
+                // 게임 화면으로 들어가기 전에 메뉴 음악 정지
                 StopTitleBGM();
 
-                // 멀티 게임 실행
+                // 멀티 실행
                 RunGame(true);
 
-                // 게임에서 메뉴로 돌아오면 타이틀 BGM 다시 재생
+                // 다시 메뉴로 돌아오면 음악 재생
                 StartTitleBGM();
             }
 
-            // 플레이 방법 선택
+            // 플레이 방법
             else if (menu == 2) {
-                // 플레이 방법 화면 출력
+                // 설명 화면 출력
                 ShowHowToPlay();
             }
 
-            // 크레딧 선택
+            // 크레딧
             else if (menu == 3) {
                 // 크레딧 화면 실행
                 RunCreditHall();
             }
 
-            // 나가기 선택
+            // 나가기
             else if (menu == 4) {
-                // while문 탈출 후 게임 종료
+                // 반복문을 빠져나가서 종료
                 break;
             }
         }
