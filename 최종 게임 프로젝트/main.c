@@ -70,6 +70,10 @@ int areaNotiTimer = 0;
 //  2 = 하늘 BGM
 int currentMapBgmZone = -1;
 
+// scanf로 설정하는 치트 모드 변수
+bool cheatModeEnabled = false; // 치트 모드 ON/OFF
+float cheatFlyPower = 2.0f;    // 공중부양 상승 속도
+
 // [추가] 타이머 및 게임 종료 관련 변수
 ULONGLONG playTime[2] = { 0, 0 }; // 각 플레이어의 누적 활성 시간 (ms)
 ULONGLONG lastFrameTime = 0;      // 델타 타임 계산용
@@ -746,11 +750,79 @@ void Render() {
 }
 
 // =====================
-// 테스트용 공중부양 치트
+// scanf 치트 설정 함수
 // =====================
+
+// 게임 시작 전에 scanf로 치트 모드 사용 여부를 입력받고,
+// 치트 모드를 켰을 때만 상승 속도를 추가로 입력받는 함수
+void SetupCheatModeByScanf() {
+    int cheatInput = 0;
+    float powerInput = 2.0f;
+    int scanResult;
+
+    clear_screen();
+
+    printf("=====================================\n");
+    printf("        TEST CHEAT SETTING\n");
+    printf("=====================================\n");
+    printf("치트 모드를 사용할까요?\n");
+    printf("0 = 사용 안 함, 1 = 사용\n\n");
+    printf("입력: ");
+
+    // setvbuf 때문에 printf가 바로 안 보일 수 있어서 강제로 출력
+    fflush(stdout);
+
+    // scanf로 치트 모드 사용 여부 입력
+    scanResult = scanf("%d", &cheatInput);
+
+    // 입력 버퍼에 남은 Enter 제거
+    while (getchar() != '\n');
+
+    // 입력이 잘못됐으면 치트 비활성화
+    if (scanResult != 1) {
+        cheatModeEnabled = false;
+        cheatFlyPower = 2.0f;
+        clear_screen();
+        return;
+    }
+
+    // 조건문으로 치트 모드 사용 여부 확인
+    if (cheatInput == 1) {
+        cheatModeEnabled = true;
+
+        printf("\n상승 속도를 입력하시오.\n");
+        printf("추천값: 2.0\n");
+        printf("입력: ");
+
+        fflush(stdout);
+
+        // 치트 모드가 켜졌을 때만 상승 속도 입력
+        scanResult = scanf("%f", &powerInput);
+
+        // 입력 버퍼에 남은 Enter 제거
+        while (getchar() != '\n');
+
+        // 상승 속도가 잘못 입력되면 기본값 사용
+        if (scanResult != 1 || powerInput <= 0.0f) {
+            cheatFlyPower = 2.0f;
+        }
+        else {
+            cheatFlyPower = powerInput;
+        }
+    }
+    else {
+        cheatModeEnabled = false;
+        cheatFlyPower = 2.0f;
+    }
+
+    clear_screen();
+}
 
 // C키를 누르고 있는 동안 현재 플레이어를 위로 계속 밀어 올리는 함수
 void CheckFlyCheat() {
+    // scanf에서 치트 모드를 끈 상태라면 함수 종료
+    if (!cheatModeEnabled) return;
+
     Player* p = &players[currentPlayer];
 
     // C키를 누르고 있으면 공중부양 활성화
@@ -762,9 +834,9 @@ void CheckFlyCheat() {
         // 공중 상태로 변경
         p->isJumping = true;
 
-        // 위쪽으로 계속 힘을 줌
-        // 값이 작을수록 천천히 상승, 클수록 빠르게 상승
-        p->vy = -2.0f;
+        // scanf로 입력받은 상승 속도만큼 위쪽으로 힘을 줌
+        // cheatFlyPower 값이 작을수록 천천히 상승하고, 클수록 빠르게 상승함
+        p->vy = -cheatFlyPower;
 
         // 공중부양 중 좌우 이동도 가능하게 처리
         if (GetAsyncKeyState('A') & 0x8000) {
@@ -793,6 +865,9 @@ void CheckFlyCheat() {
 void RunGame(bool multi) {
     // 게임 시작 시 플레이어 위치, 카메라, 타이머, 구역 정보 초기화
     InitGame(multi);
+
+    // 게임 시작 전에 scanf로 치트 모드 설정
+    SetupCheatModeByScanf();
 
     // 맵 BGM 상태 초기화
     // 이전 게임에서 재생된 구역 정보가 남지 않도록 -1로 초기화
